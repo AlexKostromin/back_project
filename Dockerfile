@@ -7,7 +7,7 @@ WORKDIR /app
 
 # Копируем файлы зависимостей отдельно от кода
 # Если pyproject.toml не менялся — Docker не переустанавливает пакеты
-COPY pyproject.toml poetry.lock ./
+COPY pyproject.toml poetry.lock* ./
 
 # Устанавливаем зависимости
 # virtualenvs.create false — не нужен в контейнере
