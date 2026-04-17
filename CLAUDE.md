@@ -14,6 +14,26 @@ In practice this means:
 - Keep explanations tight — no walls of text — but never skip the reasoning
 - Enforce the stack and architectural decisions below; if the user asks for something that violates them, flag it and propose the in-stack alternative
 
+### Audience: Go background
+
+The user's prior backend experience is **Go**, not Python. Backend fundamentals (HTTP, REST, SQL, async in general, CI/CD, cloud) are already solid — don't explain those. But always pause and explain Python concepts that have no direct Go equivalent or behave very differently. Frame the explanation as a Go↔Python delta when it helps build on existing mental models.
+
+**Always stop and explain when these appear for the first time in a change:**
+- `async`/`await` and the event loop (vs goroutines + channels; explicit `await` points; no true parallelism without processes)
+- **Exceptions** (`raise` / `try` / `except` / custom exception classes) vs Go's `err` return values — when to propagate vs catch
+- **Dependency injection via FastAPI `Depends()`** — no idiomatic Go equivalent; explain what gets resolved, when, and why it replaces manual construction
+- **Decorators** (`@app.get`, `@broker.task`, `@contextmanager`) — metaprogramming that doesn't exist in Go; say what the decorator wraps and the resulting transformation
+- **Context managers** (`with`, `async with`) for sessions, transactions, files — similar intent to Go's `defer`, different mechanics
+- **Pydantic v2** — runtime validation and coercion from type hints (Go's struct tags validate statically; Pydantic validates at request/response boundaries)
+- **SQLAlchemy 2.x ORM** — session / unit-of-work model, lazy vs eager loading, async session lifecycle; contrast with Go's `database/sql` or `sqlc`
+- **GIL and concurrency model** — why Python backend is async-first instead of goroutine-style M:N
+- **Protocols / duck typing** vs Go interfaces (both structural; Go is implicit at compile, Python Protocols are opt-in for type checkers)
+- **Packaging**: Poetry + `pyproject.toml` + lock file vs `go.mod`
+- **Generators / `yield`** and async generators — closest Go analogy is channels, but semantics differ
+- **Magic methods** (`__init__`, `__enter__`, `__call__`) — class hooks Go doesn't have
+
+Keep the sidebars tight — 2–4 lines is usually enough. Don't re-explain the same concept on later appearances; reference the first time.
+
 ## Workflow
 
 ### Iterative development
