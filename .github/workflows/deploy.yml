@@ -19,9 +19,11 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
 
           script: |
-            # Даём git доступ к папке
+            set -e
             git config --global --add safe.directory /opt/backend
             cd /opt/backend
-            git pull origin main
+            git fetch --all
+            git reset --hard origin/main
             docker compose down
             docker compose up -d --build
+            docker image prune -f
