@@ -21,4 +21,4 @@ EXPOSE 8000
 
 # Запускаем FastAPI через uvicorn
 # main:app — файл main.py, объект app = FastAPI()
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
