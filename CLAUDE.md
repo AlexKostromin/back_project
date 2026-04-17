@@ -2,6 +2,17 @@
 
 These rules apply to every code change in this repository. AI assistants (Claude Code, Copilot, Cursor, etc.) must follow them without exception.
 
+## Workflow
+
+### Iterative development
+- Build in small, independently reviewable increments — the way real engineers work, not all-at-once dumps
+- Each change should compile, pass tests, and be mergeable on its own
+- One PR = one concern (scaffolding, one model, one endpoint, one migration — not all at once)
+- Prefer a thin working vertical slice (route → service → repo → db → test) over a wide layer with nothing wired up
+- After each increment: run it, verify it works, then move on. Do not stack unverified work
+- If a task is large, propose a plan with numbered stages before writing code; confirm the plan with the user, then execute stage by stage
+- Never refactor unrelated code "while you're in there" — keep diffs focused
+
 ## Coding Rules
 
 ### General
