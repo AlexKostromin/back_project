@@ -1,0 +1,34 @@
+# CODEOWNERS — GitHub auto-requests review from the listed owners
+# when a PR touches a matching path. See:
+# https://docs.github.com/en/repositories/managing-your-repositories-settings-and-security/customizing-your-repository/about-code-owners
+#
+# Syntax: <path-pattern>  <@owner1> <@owner2> ...
+# Later rules override earlier ones; the last matching rule wins.
+
+# Default owner for everything not matched below
+*                           @alexkostromin
+
+# Domain: Search (ES, Qdrant, RAG, indexing)
+/app/search/                @alexkostromin
+
+# Domain: Auth (JWT, users, orgs, RBAC, RLS policies)
+/app/auth/                  @KorostelevDanila
+
+# Shared code — both domain owners must approve
+/app/core/                  @alexkostromin @KorostelevDanila
+/app/db/                    @alexkostromin @KorostelevDanila
+/app/main.py                @alexkostromin @KorostelevDanila
+
+# Migrations — shared history, both owners must approve
+/alembic/                   @alexkostromin @KorostelevDanila
+/alembic.ini                @alexkostromin @KorostelevDanila
+
+# Infra and CI — both owners must approve
+/.github/                   @alexkostromin @KorostelevDanila
+/docker-compose.yml         @alexkostromin @KorostelevDanila
+/Dockerfile                 @alexkostromin @KorostelevDanila
+/pyproject.toml             @alexkostromin @KorostelevDanila
+/poetry.lock                @alexkostromin @KorostelevDanila
+
+# AI-assistant instructions — changes to project-wide rules require both owners
+/CLAUDE.md                  @alexkostromin @KorostelevDanila
