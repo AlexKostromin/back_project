@@ -15,5 +15,12 @@ jobs:
         with:
           python-version: "3.11"
       - uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+      - uses: actions/cache@v4
+        with:
+          path: .venv
+          key: venv-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
       - run: poetry install --with dev --no-interaction
       - run: poetry run pytest -v
