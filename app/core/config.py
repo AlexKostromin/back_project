@@ -10,8 +10,8 @@ class Settings(BaseSettings):
         extra="ignore",
     )
     app_name: str = "LexInsight Backend"
-    version: str = "0.1.0"
-    debug: bool = False
+    app_version: str = "0.1.0"
+    app_debug: bool = False
 
 
 @lru_cache
