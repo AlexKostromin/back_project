@@ -14,6 +14,68 @@ In practice this means:
 - Keep explanations tight — no walls of text — but never skip the reasoning
 - Enforce the stack and architectural decisions below; if the user asks for something that violates them, flag it and propose the in-stack alternative
 
+## Architecture & Team Boundaries
+
+### Modular monolith (not microservices)
+
+LexInsight backend is a **modular monolith**: one repo (`back_project`), one FastAPI process, one Postgres database. Logical domains (`auth`, `search`, future `documents`, `billing`, ...) are **Python packages under `app/`, not separate services**. They share:
+- one SQLAlchemy `Base` / `metadata`
+- one Alembic migration history
+- one connection pool and `AsyncSession`
+- one deployment unit
+
+**Why this choice:** MVP stage, 2-person team, RLS for org isolation requires a single Postgres, FK links between domains (e.g. `saved_searches.user_id → users.id`) are natural. Microservices would add distributed transactions, service discovery, cross-service auth, and observability complexity without solving any real pain at this scale. Standard industry guidance: start with a modular monolith, split out a service only when specific pressure forces it (independent scaling, team size > ~15, different stacks, regulatory isolation).
+
+**Never propose** separate databases per domain, cross-service HTTP calls for internal data, separate repos per domain, or "let's split auth into its own service" — flag it as a violation and explain why it's premature.
+
+### Package layout and domain ownership
+
+```
+app/
+├── auth/        — owned by @auth-owner (JWT, users, orgs, RBAC, RLS policies)
+├── search/      — owned by @search-owner (ES, Qdrant, RAG, indexing, saved searches)
+├── core/        — shared (config, exceptions, logging, middleware)
+├── db/          — shared (Base, session factory, engine)
+└── main.py      — shared (router registration, app factory)
+```
+
+Each domain package follows: `models.py` → `repository.py` → `service.py` → `routes.py`. New domains are added as new top-level packages under `app/`.
+
+### Import boundaries
+
+To keep domains cleanly separable later, enforce these rules at review time:
+- A domain package **may not import another domain's `models.py` or `repository.py`** directly.
+- If domain A needs data from domain B, it calls `app.b.service` (the public API of that domain).
+- Example: `app/search/service.py` needs a user's display name → imports `app.auth.service.get_user_by_id`, **not** `app.auth.models.User`.
+- Exception: cross-domain **FK declarations** in `models.py` may reference another domain's table by string name (`ForeignKey("users.id")`) — this is a DB-level link, not a code-level import.
+
+If you find code crossing these boundaries, flag it and propose the service-layer alternative.
+
+### Shared code (`app/core/`, `app/db/`, `app/main.py`)
+
+Any change here affects both domains. AI assistants must:
+- Flag the change as "touches shared code — requires review from the other domain owner".
+- Avoid bundling shared-code changes with domain-specific changes in one PR — split them.
+
+### Migration coordination (Alembic)
+
+One shared migration history → two devs generating migrations on parallel branches creates **multiple heads** (Alembic fails to apply). Rules:
+- Before `alembic revision --autogenerate`, pull latest `main` and rebase the feature branch.
+- If two migrations already landed in parallel and produced two heads, create a merge migration: `alembic merge heads -m "merge <domain-a> and <domain-b>"`.
+- CI must fail when `alembic heads` returns more than one head (add this check when Alembic is introduced).
+- A migration PR is never combined with unrelated code changes — one PR, one migration.
+
+### Cross-domain foreign keys
+
+Cross-domain FKs (e.g., `saved_searches.user_id → users.id`) are allowed and encouraged — it's one database. But:
+- The PR introducing the FK requires an approving review from the owner of the referenced domain.
+- The referencing model uses a string-name `ForeignKey("users.id")` to avoid importing the other domain's model class.
+- Breaking changes to a referenced column (rename, drop, type change) require coordination with every domain that references it.
+
+### Team composition
+
+Current backend team: 2 developers. Domain ownership above is authoritative. When proposing changes, an AI assistant should call out when a change touches the other dev's domain or shared code, so the user can loop them in before writing the PR.
+
 ## Workflow
 
 ### Iterative development
