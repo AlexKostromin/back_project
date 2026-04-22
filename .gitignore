@@ -19,3 +19,9 @@ venv/
 # Personal guides (kept locally)
 lexinsight_backend_guide.md
 auth_plan.md
+
+# Claude Code local settings (agents, settings.local.json, etc.)
+.claude/
+
+# Local artifacts
+files.zip
