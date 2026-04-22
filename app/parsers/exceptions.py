@@ -25,3 +25,17 @@ class ParseError(ParserError):
     """Failed to parse a specific document."""
 
     pass
+
+
+class CircuitOpenError(ParserError):
+    """Circuit breaker is open after consecutive errors."""
+
+    pass
+
+
+class MaxRetriesError(ParserError):
+    """Maximum retry attempts exceeded."""
+
+    def __init__(self, message: str, attempts: int) -> None:
+        super().__init__(message)
+        self.attempts = attempts
