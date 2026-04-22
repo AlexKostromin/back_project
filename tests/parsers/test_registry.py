@@ -13,7 +13,7 @@ class DummyParser(BaseParser):
 
     source_key: ClassVar[str] = "dummy"
 
-    async def fetch_list(self, *, since=None, limit=100):
+    async def crawl(self, *, date_from=None, date_to=None, limit=None):
         yield  # pragma: no cover
 
     async def fetch_document(self, source_id: str):
@@ -28,7 +28,7 @@ class EmptyKeyParser(BaseParser):
 
     source_key: ClassVar[str] = ""
 
-    async def fetch_list(self, *, since=None, limit=100):
+    async def crawl(self, *, date_from=None, date_to=None, limit=None):
         yield  # pragma: no cover
 
     async def fetch_document(self, source_id: str):
@@ -103,7 +103,7 @@ def test_available_returns_all_keys():
     class ParserA(BaseParser):
         source_key: ClassVar[str] = "source_a"
 
-        async def fetch_list(self, *, since=None, limit=100):
+        async def crawl(self, *, date_from=None, date_to=None, limit=None):
             yield  # pragma: no cover
 
         async def fetch_document(self, source_id: str):
@@ -115,7 +115,7 @@ def test_available_returns_all_keys():
     class ParserB(BaseParser):
         source_key: ClassVar[str] = "source_b"
 
-        async def fetch_list(self, *, since=None, limit=100):
+        async def crawl(self, *, date_from=None, date_to=None, limit=None):
             yield  # pragma: no cover
 
         async def fetch_document(self, source_id: str):
