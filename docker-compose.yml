@@ -8,8 +8,11 @@ services:
     env_file: .env
     environment:
       POSTGRES_HOST: postgres
+      ES_URL: http://elasticsearch:9200
     depends_on:
       postgres:
+        condition: service_healthy
+      elasticsearch:
         condition: service_healthy
 
 
@@ -31,5 +34,28 @@ services:
       timeout: 5s
       retries: 5
 
+
+  elasticsearch:
+    image: elasticsearch:8.15.3
+    container_name: elasticsearch
+    restart: unless-stopped
+    ports:
+      - "9200:9200"
+    environment:
+      # Single-node dev cluster. Security disabled — this is a local stack,
+      # never expose 9200 outside the dev machine. Prod will ship with
+      # xpack.security.enabled=true + credentials in Settings.
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health?wait_for_status=yellow&timeout=2s" ]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
 volumes:
   postgres_data:
+  elasticsearch_data:
