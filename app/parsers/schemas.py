@@ -122,7 +122,7 @@ class ParsedDecision(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    source: str
+    source_name: str
     source_id: str
     case_number: str
     court_name: str
@@ -143,7 +143,7 @@ class ParsedDecision(BaseModel):
     full_text: str
     sections: dict[str, str] = Field(default_factory=dict)
     text_hash: str = Field(min_length=64, max_length=64, pattern=r"^[0-9a-f]+$")
-    source_url: str | None = None
+    source_url: str
     minio_path: str | None = None
     crawled_at: datetime
     parsed_at: datetime

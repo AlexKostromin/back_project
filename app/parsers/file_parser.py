@@ -91,12 +91,15 @@ class FileParser(BaseParser):
             full_text = data.get("full_text", "")
             text_hash = sha256(full_text.encode("utf-8")).hexdigest()
 
+            # Build source_url: use raw.url if available, otherwise construct file:// URL
+            source_url = raw.url or f"file://{self.fixtures_dir / raw.source_id}.json"
+
             return ParsedDecision(
                 **data,
-                source=self.source_key,
+                source_name=self.source_key,
                 source_id=raw.source_id,
                 text_hash=text_hash,
-                source_url=raw.url,
+                source_url=source_url,
                 crawled_at=raw.crawled_at,
                 parsed_at=datetime.now(timezone.utc),
             )

@@ -4,6 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING
 
+import sqlalchemy as sa
 from sqlalchemy import BigInteger, Date, DateTime, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -26,7 +27,7 @@ class CourtDecision(Base):
     case_number: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     court_name: Mapped[str] = mapped_column(Text, nullable=False)
     court_type: Mapped[str] = mapped_column(String(20), nullable=False)
-    instance_level: Mapped[int | None] = mapped_column(nullable=True)
+    instance_level: Mapped[int] = mapped_column(nullable=False)
     region: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     decision_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
@@ -35,9 +36,11 @@ class CourtDecision(Base):
     doc_type: Mapped[str] = mapped_column(String(50), nullable=False)
     judges: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)
 
-    result: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    appeal_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
-    dispute_type: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    result: Mapped[str] = mapped_column(String(30), nullable=False)
+    appeal_status: Mapped[str] = mapped_column(
+        String(30), nullable=False, server_default=sa.text("'none'")
+    )
+    dispute_type: Mapped[str] = mapped_column(String(30), nullable=False)
     category: Mapped[str | None] = mapped_column(Text, nullable=True)
     claim_amount: Mapped[Decimal | None] = mapped_column(Numeric(15, 2), nullable=True)
 
@@ -48,6 +51,9 @@ class CourtDecision(Base):
 
     source_url: Mapped[str] = mapped_column(Text, nullable=False)
     minio_path: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    crawled_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    parsed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     es_indexed: Mapped[bool] = mapped_column(default=False, nullable=False)
     qdrant_indexed: Mapped[bool] = mapped_column(default=False, nullable=False)

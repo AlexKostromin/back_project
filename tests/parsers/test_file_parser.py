@@ -56,7 +56,7 @@ async def test_fetch_and_parse_valid(tmp_fixtures_dir: Path):
     parsed = await parser.fetch_and_parse("case_001")
 
     assert isinstance(parsed, ParsedDecision)
-    assert parsed.source == "file"
+    assert parsed.source_name == "file"
     assert parsed.source_id == "case_001"
     assert parsed.case_number == "А40-12345/2025"
     assert parsed.court_name == "Арбитражный суд города Москвы"
@@ -83,7 +83,7 @@ async def test_fetch_and_parse_valid(tmp_fixtures_dir: Path):
     assert "Решение суда" in parsed.full_text
     assert len(parsed.text_hash) == 64
     assert parsed.sections.get("resolutive") == "Удовлетворить исковые требования..."
-    assert parsed.source_url is None
+    assert parsed.source_url.startswith("file://")
     assert isinstance(parsed.crawled_at, datetime)
     assert isinstance(parsed.parsed_at, datetime)
 
@@ -186,7 +186,7 @@ def test_parsed_decision_is_frozen(tmp_fixtures_dir: Path):
     from datetime import date, datetime
 
     parsed = ParsedDecision(
-        source="file",
+        source_name="file",
         source_id="test",
         case_number="TEST-001",
         court_name="Test Court",
@@ -200,6 +200,7 @@ def test_parsed_decision_is_frozen(tmp_fixtures_dir: Path):
         participants=[],
         full_text="Test",
         text_hash="a" * 64,
+        source_url="https://example.com/test",
         crawled_at=datetime.now(),
         parsed_at=datetime.now(),
     )
