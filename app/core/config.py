@@ -1,7 +1,7 @@
 from __future__ import annotations
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import computed_field
+from pydantic import computed_field, field_validator
 
 
 class Settings(BaseSettings):
@@ -27,6 +27,17 @@ class Settings(BaseSettings):
     es_url: str = "http://localhost:9200"
     es_request_timeout_s: int = 10
     es_court_decisions_index: str = "court_decisions"
+
+    scraper_user_agent: str = "LexInsight-Bot/1.0 (+https://lexinsight.ru/bot; bot@lexinsight.ru)"
+    scraper_connect_timeout: float = 5.0
+    scraper_read_timeout: float = 30.0
+
+    @field_validator("scraper_user_agent")
+    @classmethod
+    def _no_crlf(cls, v: str) -> str:
+        if "\r" in v or "\n" in v:
+            raise ValueError("scraper_user_agent must not contain CR or LF")
+        return v
 
     @computed_field
     @property
