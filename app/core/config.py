@@ -24,6 +24,9 @@ class Settings(BaseSettings):
     postgres_host: str = "localhost"
     postgres_port: int = 5432
 
+    es_url: str = "http://localhost:9200"
+    es_request_timeout_s: int = 10
+
     @computed_field
     @property
     def database_url(self) -> str:
