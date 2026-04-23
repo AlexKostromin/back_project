@@ -2,6 +2,7 @@ from fastapi import Depends, FastAPI
 
 from app.core.config import Settings, get_settings
 from app.core.error_handlers import register_exception_handlers
+from app.modules.search.router import router as search_router
 
 settings = get_settings()
 # NOTE: ``debug`` is intentionally NOT passed to FastAPI. With ``debug=True``
@@ -12,6 +13,8 @@ settings = get_settings()
 app = FastAPI(title=settings.app_name, version=settings.app_version)
 
 register_exception_handlers(app)
+
+app.include_router(search_router, prefix="/api/v1")
 
 
 @app.get("/")
