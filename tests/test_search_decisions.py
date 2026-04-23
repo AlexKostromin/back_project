@@ -56,7 +56,7 @@ def _raw_payload(case_number: str = "А40-77777/2025", text: str = "текст �
 
 
 @pytest.mark.asyncio
-async def test_get_decision_happy_path(clean_search_tables) -> None:
+async def test_get_decision_happy_path(clean_search_tables, clean_es_index) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         ingest = await client.post(
@@ -97,7 +97,7 @@ async def test_get_decision_happy_path(clean_search_tables) -> None:
     }
     assert len(body["text_hash"]) == 64
     assert body["source_url"].startswith("https://kad.arbitr.ru/Card/")
-    assert body["es_indexed"] is False
+    assert body["es_indexed"] is True
     assert body["qdrant_indexed"] is False
     assert "created_at" in body
     assert "updated_at" in body

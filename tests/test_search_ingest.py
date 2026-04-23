@@ -2,8 +2,12 @@ from __future__ import annotations
 
 import pytest
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 
+from app.db import session as db_session
+from app.db.models import CourtDecision
 from app.main import app
+from tests.conftest import TEST_ES_INDEX
 
 
 def _raw_payload(case_number: str = "А40-12345/2025", text: str = "текст решения суда") -> dict:
@@ -51,7 +55,11 @@ def _raw_payload(case_number: str = "А40-12345/2025", text: str = "текст �
 
 
 @pytest.mark.asyncio
-async def test_ingest_creates_decision(clean_search_tables):
+async def test_ingest_creates_decision_in_pg_and_es(
+    clean_search_tables, clean_es_index
+):
+    es = clean_es_index
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
@@ -62,12 +70,32 @@ async def test_ingest_creates_decision(clean_search_tables):
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "created"
-    assert body["decision_id"] is not None
+    decision_id = body["decision_id"]
+    assert decision_id is not None
     assert len(body["text_hash"]) == 64
+
+    # Postgres: es_indexed flipped to True after successful ES write.
+    sessionmaker = db_session.get_sessionmaker()
+    async with sessionmaker() as session:
+        row = (
+            await session.execute(
+                select(CourtDecision).where(CourtDecision.id == decision_id)
+            )
+        ).scalar_one()
+        assert row.es_indexed is True
+
+    # Elasticsearch: document lands at the same id with searchable fields.
+    doc = await es.get(index=TEST_ES_INDEX, id=str(decision_id))
+    assert doc["_source"]["case_number"] == "А40-12345/2025"
+    assert doc["_source"]["court_type"] == "arbitrazh"
+    assert doc["_source"]["full_text"] == "текст решения суда"
+    assert doc["_source"]["participants"][0]["name"] == "ООО Ромашка"
 
 
 @pytest.mark.asyncio
-async def test_ingest_is_idempotent_on_duplicate_full_text(clean_search_tables):
+async def test_ingest_is_idempotent_on_duplicate_full_text(
+    clean_search_tables, clean_es_index
+):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         first = await client.post(
@@ -96,3 +124,40 @@ async def test_ingest_rejects_invalid_payload():
         response = await client.post("/api/v1/search/ingest/decision", json=payload)
 
     assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_ingest_survives_es_failure(
+    clean_search_tables, clean_es_index, monkeypatch
+):
+    """If ES refuses the write (e.g. index temporarily offline), the
+    ingest still commits to Postgres and returns CREATED — es_indexed
+    stays False so a reindex task can pick it up later."""
+
+    from app.modules.search.services import processor as processor_module
+
+    async def _boom(self, decision) -> None:
+        raise RuntimeError("simulated ES outage")
+
+    monkeypatch.setattr(processor_module.DecisionProcessor, "_index_in_es", _boom)
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/search/ingest/decision",
+            json=_raw_payload(text="es down but pg ok"),
+        )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "created"
+
+    sessionmaker = db_session.get_sessionmaker()
+    async with sessionmaker() as session:
+        row = (
+            await session.execute(
+                select(CourtDecision).where(
+                    CourtDecision.id == response.json()["decision_id"]
+                )
+            )
+        ).scalar_one()
+        assert row.es_indexed is False

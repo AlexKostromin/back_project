@@ -26,6 +26,7 @@ class Settings(BaseSettings):
 
     es_url: str = "http://localhost:9200"
     es_request_timeout_s: int = 10
+    es_court_decisions_index: str = "court_decisions"
 
     @computed_field
     @property
