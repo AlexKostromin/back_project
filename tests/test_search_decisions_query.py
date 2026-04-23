@@ -56,7 +56,7 @@ async def _ingest(client: AsyncClient, payload: dict[str, Any]) -> int:
 
 
 @pytest.mark.asyncio
-async def test_search_returns_empty_when_no_data(clean_search_tables) -> None:
+async def test_search_returns_empty_when_no_data(clean_search_tables, clean_es_index) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post("/api/v1/search/decisions", json={})
@@ -68,7 +68,7 @@ async def test_search_returns_empty_when_no_data(clean_search_tables) -> None:
 
 @pytest.mark.asyncio
 async def test_search_filters_by_court_type_and_date_range(
-    clean_search_tables,
+    clean_search_tables, clean_es_index,
 ) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -121,7 +121,7 @@ async def test_search_filters_by_court_type_and_date_range(
 
 
 @pytest.mark.asyncio
-async def test_search_sort_date_desc_is_default(clean_search_tables) -> None:
+async def test_search_sort_date_desc_is_default(clean_search_tables, clean_es_index) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         await _ingest(
@@ -161,7 +161,7 @@ async def test_search_sort_date_desc_is_default(clean_search_tables) -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_sort_date_asc(clean_search_tables) -> None:
+async def test_search_sort_date_asc(clean_search_tables, clean_es_index) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         await _ingest(
@@ -194,7 +194,7 @@ async def test_search_sort_date_asc(clean_search_tables) -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_pagination(clean_search_tables) -> None:
+async def test_search_pagination(clean_search_tables, clean_es_index) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         for i in range(5):
@@ -235,7 +235,7 @@ async def test_search_pagination(clean_search_tables) -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_claim_amount_range(clean_search_tables) -> None:
+async def test_search_claim_amount_range(clean_search_tables, clean_es_index) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         await _ingest(
@@ -278,7 +278,7 @@ async def test_search_claim_amount_range(clean_search_tables) -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_rejects_inverted_date_range(clean_search_tables) -> None:
+async def test_search_rejects_inverted_date_range(clean_search_tables, clean_es_index) -> None:
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.post(
@@ -290,7 +290,7 @@ async def test_search_rejects_inverted_date_range(clean_search_tables) -> None:
 
 
 @pytest.mark.asyncio
-async def test_search_snippet_is_truncated(clean_search_tables) -> None:
+async def test_search_snippet_is_truncated(clean_search_tables, clean_es_index) -> None:
     long_text = "А" * 1000
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
