@@ -66,7 +66,7 @@ async def test_fetch_and_parse_calls_both_methods():
             full_text = "Test text"
             text_hash = "a" * 64  # Valid 64-char hex
             return ParsedDecision(
-                source=self.source_key,
+                source_name=self.source_key,
                 source_id=raw.source_id,
                 case_number="TEST-001",
                 court_name="Test Court",
@@ -80,7 +80,7 @@ async def test_fetch_and_parse_calls_both_methods():
                 participants=[],
                 full_text=full_text,
                 text_hash=text_hash,
-                source_url=raw.url,
+                source_url=raw.url or "https://example.com/test",
                 crawled_at=raw.crawled_at,
                 parsed_at=datetime.now(),
             )

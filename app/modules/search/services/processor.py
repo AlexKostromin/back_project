@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+from datetime import datetime, timezone
 
 import structlog
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -66,21 +67,23 @@ class DecisionProcessor:
             case_number=raw.case_number,
             court_name=raw.court_name,
             court_type=raw.court_type.value,
-            instance_level=raw.instance_level,
+            instance_level=raw.instance_level if raw.instance_level is not None else 1,
             region=raw.region,
             decision_date=raw.decision_date,
             publication_date=raw.publication_date,
             doc_type=raw.doc_type.value,
             judges=list(raw.judges),
-            result=raw.result.value if raw.result else None,
-            appeal_status=raw.appeal_status.value if raw.appeal_status else None,
-            dispute_type=raw.dispute_type.value if raw.dispute_type else None,
+            result=raw.result.value if raw.result else "other",
+            appeal_status=raw.appeal_status.value if raw.appeal_status else "none",
+            dispute_type=raw.dispute_type.value if raw.dispute_type else "civil",
             category=raw.category,
             claim_amount=raw.claim_amount,
             full_text=raw.full_text,
             sections=raw.sections.model_dump() if raw.sections else None,
             text_hash=text_hash,
             source_url=str(raw.source_url),
+            crawled_at=datetime.now(timezone.utc),
+            parsed_at=datetime.now(timezone.utc),
             participants=[
                 DecisionParticipant(
                     name=p.name,
