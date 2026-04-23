@@ -129,6 +129,16 @@ Current backend team: 2 developers. Domain ownership above is authoritative. Whe
 - If a task is large, propose a plan with numbered stages before writing code; confirm the plan with the user, then execute stage by stage
 - Never refactor unrelated code "while you're in there" — keep diffs focused
 
+### Keep the tree in sync
+The project has two developers pushing to one repo — local state goes stale fast. Treat `git fetch` / `git pull` / `git push` as part of the work, not an afterthought.
+
+- **Before starting any change**: `git fetch origin && git pull --rebase origin main`. Generating a migration, editing `pyproject.toml`, running `alembic upgrade head`, or scaffolding a new module on a stale main creates avoidable conflicts later. Check `alembic heads` — if two, stop and merge before doing anything else.
+- **Open the PR as soon as the slice is done** — compiles, tests pass, branch pushed. Do not let finished work sit uncommitted or unpushed. A slice that isn't on GitHub is invisible to the other dev and to CI.
+- **When a PR of yours merges to main**: immediately rebase every branch that was stacked on it (`scripts/rebase-stack.sh` handles the cascade) and force-push. Leaving stacked PRs stale means the next reviewer sees a dirty diff full of already-merged commits and conflicts they can't fix.
+- **When the teammate merges to main**: pull before you push. If they touched shared infra (CI, Alembic head, `app/core/*`, compose, `pyproject.toml`), stop other work, run `alembic upgrade head` and the test suite locally, only then continue — this catches migration conflicts and dependency drift at minute zero instead of at PR time.
+- **Before reporting a slice as "done" to the user**: verify `git status` is clean on the branch, the branch is pushed, and CI is either green or actively running. Quietly leaving uncommitted files in the working tree has burned this project before — no exceptions.
+- **Never hoard work on a long-lived local branch.** If a single local branch accumulates more than one concern's worth of changes, stop and cut it into PR-sized slices *before* adding more.
+
 ## Coding Rules
 
 ### General
