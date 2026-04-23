@@ -25,8 +25,8 @@ if [ $# -lt 1 ]; then
     exit 2
 fi
 
-if [ -n "$(git status --porcelain)" ]; then
-    echo "working tree is dirty — commit or stash first" >&2
+if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
+    echo "working tree has uncommitted changes — commit or stash first" >&2
     exit 1
 fi
 
