@@ -15,6 +15,11 @@ class CourtDecisionRepository:
         result = await self._session.execute(stmt)
         return result.scalar_one_or_none()
 
+    async def get_by_id(self, decision_id: int) -> CourtDecision | None:
+        stmt = select(CourtDecision).where(CourtDecision.id == decision_id)
+        result = await self._session.execute(stmt)
+        return result.scalar_one_or_none()
+
     async def add(self, decision: CourtDecision) -> CourtDecision:
         self._session.add(decision)
         await self._session.flush()

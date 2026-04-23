@@ -30,3 +30,8 @@ class NotFoundError(AppError):
     code = "not_found"
     status_code = 404
     detail = "Resource not found"
+
+
+class DecisionNotFoundError(NotFoundError):
+    code = "decision_not_found"
+    detail = "Decision not found"
