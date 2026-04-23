@@ -8,6 +8,29 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: lexinsight
+          POSTGRES_PASSWORD: change-me
+          POSTGRES_DB: lexinsight
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      POSTGRES_USER: lexinsight
+      POSTGRES_PASSWORD: change-me
+      POSTGRES_DB: lexinsight
+      POSTGRES_HOST: localhost
+      POSTGRES_PORT: 5432
+
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -22,4 +45,5 @@ jobs:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
       - run: poetry install --with dev --no-interaction
+      - run: poetry run alembic upgrade head
       - run: poetry run pytest -v
