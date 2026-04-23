@@ -56,3 +56,8 @@ class ParticipantRole(StrEnum):
     DEFENDANT = "defendant"
     THIRD_PARTY = "third_party"
     OTHER = "other"
+
+
+class SortBy(StrEnum):
+    DATE_DESC = "date_desc"
+    DATE_ASC = "date_asc"
