@@ -11,10 +11,7 @@ from alembic import context
 
 from app.core.config import get_settings
 from app.db.base import Base
-
-# NOTE: model imports will be added alongside the first model revision.
-# ``Base.metadata`` is empty here because no models exist yet; alembic
-# autogenerate will detect an empty schema diff.
+from app.db import models  # noqa: F401  (register models on Base.metadata)
 
 config = context.config
 
