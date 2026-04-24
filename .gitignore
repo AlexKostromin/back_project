@@ -36,3 +36,6 @@ message.txt
 
 # Local scratch files (PII inspection, ad-hoc dumps)
 _*.txt
+
+# Session continuity notes for AI assistant — not part of the codebase
+CONTINUE.md
