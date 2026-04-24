@@ -4,15 +4,27 @@ import json
 from collections.abc import AsyncIterator
 from datetime import date, datetime, timezone
 from hashlib import sha256
+from itertools import islice
 from pathlib import Path
 
 import aiofiles
+import structlog
 from pydantic import ValidationError
 
 from app.parsers.base import BaseParser
 from app.parsers.exceptions import ParseError, SourceUnavailableError
 from app.parsers.registry import parser_registry
 from app.parsers.schemas import ParsedDecision, RawDocument
+
+logger = structlog.get_logger(__name__)
+
+MAX_JSON_SIZE_BYTES = 10 * 1024 * 1024  # 10 MB
+
+_WINDOWS_RESERVED_NAMES = frozenset({
+    "CON", "PRN", "AUX", "NUL",
+    *(f"COM{i}" for i in range(1, 10)),
+    *(f"LPT{i}" for i in range(1, 10)),
+})
 
 
 class FileParser(BaseParser):
@@ -28,6 +40,12 @@ class FileParser(BaseParser):
 
     def _validate_path(self, filename: str) -> Path:
         """Validate that resolved path stays within fixtures_dir."""
+        if "\x00" in filename:
+            raise ValueError(f"Null byte in filename: {filename!r}")
+        stem = Path(filename).stem.upper()
+        if stem in _WINDOWS_RESERVED_NAMES:
+            raise ValueError(f"Reserved Windows filename: {filename}")
+
         target = (self.fixtures_dir / filename).resolve()
 
         if not target.is_relative_to(self.fixtures_dir):
@@ -45,7 +63,7 @@ class FileParser(BaseParser):
         """Iterate over JSON fixtures in directory."""
         json_files = sorted(self.fixtures_dir.glob("*.json"))
         if limit is not None:
-            json_files = json_files[:limit]
+            json_files = list(islice(json_files, limit))
 
         for json_path in json_files:
             async with aiofiles.open(json_path, mode="r", encoding="utf-8") as f:
@@ -85,6 +103,16 @@ class FileParser(BaseParser):
             if raw.html is None:
                 raise ParseError(f"No HTML content in raw document {raw.source_id}")
 
+            # Check size limit before parsing
+            size_bytes = len(raw.html.encode("utf-8"))
+            if size_bytes > MAX_JSON_SIZE_BYTES:
+                logger.warning(
+                    "parser.parse.size_limit_exceeded",
+                    source_id=raw.source_id,
+                    size_bytes=size_bytes,
+                )
+                raise ParseError(f"Document too large: {raw.source_id}")
+
             data = json.loads(raw.html)
 
             # Compute text_hash from full_text if not provided
@@ -103,8 +131,12 @@ class FileParser(BaseParser):
                 crawled_at=raw.crawled_at,
                 parsed_at=datetime.now(timezone.utc),
             )
-        except (json.JSONDecodeError, ValidationError) as e:
-            raise ParseError(f"Failed to parse document {raw.source_id}: {e}") from e
+        except json.JSONDecodeError as e:
+            logger.warning("parser.parse.json_failed", source_id=raw.source_id, error=str(e))
+            raise ParseError(f"Failed to parse document {raw.source_id}") from e
+        except ValidationError as e:
+            logger.warning("parser.parse.validation_failed", source_id=raw.source_id, errors=e.errors())
+            raise ParseError(f"Failed to parse document {raw.source_id}") from e
 
 
 parser_registry.register(FileParser)
