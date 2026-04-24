@@ -21,6 +21,10 @@ dependencies = [
     "httpx (>=0.28.1,<0.29.0)",
     "beautifulsoup4 (>=4.12.0,<5.0.0)",
     "lxml (>=6.1.0,<7.0.0)",
+    "playwright (>=1.49.0,<2.0.0)",
+    # Pinned exactly: small community library that patches browser internals.
+    # Bump deliberately after reviewing upstream changes — supply-chain risk.
+    "playwright-stealth (==2.0.3)",
 ]
 
 
