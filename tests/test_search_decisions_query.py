@@ -501,3 +501,139 @@ async def test_search_query_and_filters_combine(
     assert body["total"] == 1
     assert body["items"][0]["case_number"] == "2-300/2025"
     assert body["items"][0]["court_type"] == "soy"
+
+
+@pytest.mark.asyncio
+async def test_search_sort_relevance_orders_by_score(
+    clean_search_tables, clean_es_index,
+) -> None:
+    # Three docs with identical dates — so any ordering difference comes
+    # from BM25 score, not the date tiebreaker. HIGH repeats "налог" many
+    # times in a short text (high TF); MID has two occurrences; LOW has a
+    # single occurrence diluted across a long text (low TF-IDF). With
+    # ``sort_by=relevance`` we expect HIGH first, LOW last.
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await _ingest(
+            client,
+            _raw_payload(
+                source_id="rel-high",
+                case_number="А40-HIGH/2025",
+                full_text="налог налог налог налог налог налог",
+                decision_date="2025-06-01",
+            ),
+        )
+        await _ingest(
+            client,
+            _raw_payload(
+                source_id="rel-mid",
+                case_number="А40-MID/2025",
+                full_text="налог налог и прочие вопросы гражданского права",
+                decision_date="2025-06-01",
+            ),
+        )
+        await _ingest(
+            client,
+            _raw_payload(
+                source_id="rel-low",
+                case_number="А40-LOW/2025",
+                full_text=(
+                    "один единственный налог в огромном корпусе слов про "
+                    "договоры поставки и прочую коммерцию хозяйственную "
+                    "деятельность юридических лиц"
+                ),
+                decision_date="2025-06-01",
+            ),
+        )
+
+        response = await client.post(
+            "/api/v1/search/decisions",
+            json={"query": "налог", "sort_by": "relevance"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 3
+    items = body["items"]
+    assert len(items) == 3
+    assert items[0]["case_number"] == "А40-HIGH/2025"
+    assert items[-1]["case_number"] == "А40-LOW/2025"
+
+
+@pytest.mark.asyncio
+async def test_search_sort_relevance_without_query_is_rejected(
+    clean_search_tables, clean_es_index,
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/search/decisions",
+            json={"sort_by": "relevance"},
+        )
+
+    assert response.status_code == 422
+    # Best-effort sanity check on the error payload — Pydantic v2 nests
+    # validator messages under ``detail[*].msg``. We don't hard-fail if
+    # the wording drifts, only if neither hint is present anywhere.
+    detail_blob = str(response.json()).lower()
+    assert "relevance" in detail_blob or "query" in detail_blob
+
+
+@pytest.mark.asyncio
+async def test_search_sort_relevance_paginates_stably(
+    clean_search_tables, clean_es_index,
+) -> None:
+    # Four docs with the same searchable term ("налог") and dates → the
+    # BM25 score for ``query=налог`` is identical across them (one match
+    # in a two-token field, same collection stats). Each text has a
+    # trailing integer so ``text_hash`` differs and the ingest pipeline
+    # doesn't deduplicate. Without a deterministic tiebreaker, ES could
+    # return the same doc on both pages (or skip one); the repository
+    # adds ``id`` as a secondary sort key, so page 1 ∪ page 2 must yield
+    # exactly four distinct ids.
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        for i in range(4):
+            await _ingest(
+                client,
+                _raw_payload(
+                    source_id=f"rel-tie-{i}",
+                    case_number=f"А40-TIE{i}/2025",
+                    full_text=f"налог {i}",
+                    decision_date="2025-06-01",
+                ),
+            )
+
+        page1 = await client.post(
+            "/api/v1/search/decisions",
+            json={
+                "query": "налог",
+                "sort_by": "relevance",
+                "page_size": 2,
+                "page": 1,
+            },
+        )
+        page2 = await client.post(
+            "/api/v1/search/decisions",
+            json={
+                "query": "налог",
+                "sort_by": "relevance",
+                "page_size": 2,
+                "page": 2,
+            },
+        )
+
+    assert page1.status_code == 200
+    assert page2.status_code == 200
+
+    p1_body = page1.json()
+    p2_body = page2.json()
+    assert p1_body["total"] == 4
+    assert p2_body["total"] == 4
+    assert len(p1_body["items"]) == 2
+    assert len(p2_body["items"]) == 2
+
+    ids = [item["id"] for item in p1_body["items"]] + [
+        item["id"] for item in p2_body["items"]
+    ]
+    assert len(set(ids)) == 4

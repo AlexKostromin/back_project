@@ -61,3 +61,4 @@ class ParticipantRole(StrEnum):
 class SortBy(StrEnum):
     DATE_DESC = "date_desc"
     DATE_ASC = "date_asc"
+    RELEVANCE = "relevance"
