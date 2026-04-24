@@ -29,3 +29,10 @@ prompt_data_processor.md
 
 # Local artifacts
 files.zip
+
+# DevTools HAR exports — contain user IP / cookies / browser fingerprint
+*.har
+message.txt
+
+# Local scratch files (PII inspection, ad-hoc dumps)
+_*.txt
