@@ -34,3 +34,28 @@ async def test_root_returns_ok():
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
+
+
+@pytest.mark.asyncio
+async def test_openapi_exposes_search_request_examples() -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.get("/openapi.json")
+
+    assert response.status_code == 200
+    spec = response.json()
+
+    schemas = spec["components"]["schemas"]
+    search_request = schemas["SearchDecisionsRequest"]
+    examples = search_request.get("examples")
+
+    assert examples is not None, "SearchDecisionsRequest must expose Swagger examples"
+    assert len(examples) == 4
+
+    summaries = {e["summary"] for e in examples}
+    assert summaries == {
+        "Filter-only default",
+        "Relevance search",
+        "Narrow by court + period",
+        "Combined query and filters",
+    }

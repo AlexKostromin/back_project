@@ -27,7 +27,56 @@ class SearchDecisionsRequest(BaseModel):
     clauses. Facets and participant/norm predicates come in a later slice.
     """
 
-    model_config = ConfigDict(extra="forbid")
+    model_config = ConfigDict(
+        extra="forbid",
+        json_schema_extra={
+            "examples": [
+                {
+                    "summary": "Filter-only default",
+                    "description": "No text query, default sort (date desc), first page of 20.",
+                    "value": {},
+                },
+                {
+                    "summary": "Relevance search",
+                    "description": (
+                        "BM25 over full_text/court_name/category with the "
+                        "Russian analyzer. Sort by _score."
+                    ),
+                    "value": {
+                        "query": "налог",
+                        "sort_by": "relevance",
+                        "page_size": 5,
+                    },
+                },
+                {
+                    "summary": "Narrow by court + period",
+                    "description": (
+                        "Pure filter request — arbitrazh courts in Moscow "
+                        "for the 2025 calendar year."
+                    ),
+                    "value": {
+                        "court_type": "arbitrazh",
+                        "region": "Москва",
+                        "date_from": "2025-01-01",
+                        "date_to": "2025-12-31",
+                    },
+                },
+                {
+                    "summary": "Combined query and filters",
+                    "description": (
+                        "Full-text 'поставка' within arbitrazh, "
+                        "relevance-ranked. Shows must + filter combining "
+                        "cleanly."
+                    ),
+                    "value": {
+                        "query": "поставка",
+                        "court_type": "arbitrazh",
+                        "sort_by": "relevance",
+                    },
+                },
+            ]
+        },
+    )
 
     query: str | None = Field(default=None, min_length=1, max_length=512)
 
