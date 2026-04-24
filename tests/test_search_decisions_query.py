@@ -309,3 +309,195 @@ async def test_search_snippet_is_truncated(clean_search_tables, clean_es_index) 
     item = response.json()["items"][0]
     assert len(item["snippet"]) == 300
     assert item["snippet"] == "А" * 300
+
+
+@pytest.mark.asyncio
+async def test_search_query_matches_full_text(clean_search_tables, clean_es_index) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await _ingest(
+            client,
+            _raw_payload(
+                source_id="q-1",
+                case_number="А40-Q1/2025",
+                full_text="иск о взыскании задолженности",
+            ),
+        )
+        await _ingest(
+            client,
+            _raw_payload(
+                source_id="q-2",
+                case_number="А40-Q2/2025",
+                full_text="трудовой спор с восстановлением",
+            ),
+        )
+        await _ingest(
+            client,
+            _raw_payload(
+                source_id="q-3",
+                case_number="А40-Q3/2025",
+                full_text="административное правонарушение ГИБДД",
+            ),
+        )
+
+        response = await client.post(
+            "/api/v1/search/decisions", json={"query": "задолженности"}
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert len(body["items"]) == 1
+    assert body["items"][0]["case_number"] == "А40-Q1/2025"
+
+
+@pytest.mark.asyncio
+async def test_search_query_no_match_returns_empty(
+    clean_search_tables, clean_es_index,
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await _ingest(
+            client,
+            _raw_payload(
+                source_id="nm-1",
+                case_number="А40-NM/2025",
+                full_text="иск о взыскании задолженности",
+            ),
+        )
+
+        response = await client.post(
+            "/api/v1/search/decisions", json={"query": "абсолютно_несуществующее_слово"}
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 0
+    assert body["items"] == []
+
+
+@pytest.mark.asyncio
+async def test_search_query_highlight_populates_snippet(
+    clean_search_tables, clean_es_index,
+) -> None:
+    # Build a ~1000-char full_text composed of real word-tokens (so the ES
+    # highlighter has break-points at which to cut a ~300-char fragment)
+    # with a distinctive marker in the middle. If highlight kicks in,
+    # the snippet centres on the marker and differs from the static
+    # "first 300 chars" fallback.
+    word_head = "альфа "
+    word_tail = "омега "
+    needle = "УНИКАЛЬНОЕ"
+    prefix = word_head * 80  # ~480 chars, tokenised
+    suffix = word_tail * 80  # ~480 chars, tokenised
+    full_text = f"{prefix}{needle} {suffix}".strip()
+    assert 950 <= len(full_text) <= 1100
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await _ingest(
+            client,
+            _raw_payload(
+                source_id="hl-1",
+                case_number="А40-HL/2025",
+                full_text=full_text,
+            ),
+        )
+
+        response = await client.post(
+            "/api/v1/search/decisions", json={"query": needle}
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    snippet = body["items"][0]["snippet"]
+    # Highlight kicked in → snippet contains the match and is not the
+    # static "first 300 chars" fallback (which is pure 'альфа ' repeats).
+    assert needle in snippet
+    assert snippet != full_text[:300]
+    # fragment_size=300, but ES may overshoot a few chars on the token
+    # boundary — allow a small slack.
+    assert len(snippet) <= 310
+
+
+@pytest.mark.asyncio
+async def test_search_filters_by_region_uses_keyword_subfield(
+    clean_search_tables, clean_es_index,
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await _ingest(
+            client,
+            _raw_payload(
+                source_id="r-1",
+                case_number="А40-R1/2025",
+                full_text="текст один",
+                region="Москва",
+            ),
+        )
+        await _ingest(
+            client,
+            _raw_payload(
+                source_id="r-2",
+                case_number="А40-R2/2025",
+                full_text="текст два",
+                region="Санкт-Петербург",
+            ),
+        )
+
+        response = await client.post(
+            "/api/v1/search/decisions", json={"region": "Санкт-Петербург"}
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["case_number"] == "А40-R2/2025"
+    assert body["items"][0]["region"] == "Санкт-Петербург"
+
+
+@pytest.mark.asyncio
+async def test_search_query_and_filters_combine(
+    clean_search_tables, clean_es_index,
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        await _ingest(
+            client,
+            _raw_payload(
+                source_id="c-1",
+                case_number="А40-C1/2025",
+                full_text="иск о взыскании",
+                court_type="arbitrazh",
+            ),
+        )
+        await _ingest(
+            client,
+            _raw_payload(
+                source_id="c-2",
+                case_number="А40-C2/2025",
+                full_text="иск о разделе",
+                court_type="arbitrazh",
+            ),
+        )
+        await _ingest(
+            client,
+            _raw_payload(
+                source_id="c-3",
+                case_number="2-300/2025",
+                full_text="иск о выселении",
+                court_type="soy",
+            ),
+        )
+
+        response = await client.post(
+            "/api/v1/search/decisions",
+            json={"query": "иск", "court_type": "soy"},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 1
+    assert body["items"][0]["case_number"] == "2-300/2025"
+    assert body["items"][0]["court_type"] == "soy"

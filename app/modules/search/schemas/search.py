@@ -17,14 +17,19 @@ from app.modules.search.schemas.enums import (
 
 
 class SearchDecisionsRequest(BaseModel):
-    """Filter-only search request for court decisions.
+    """Elasticsearch-backed search request for court decisions.
 
-    Full-text query, facets and participant filters are deferred to the
-    Elasticsearch slice. This schema only exposes filters that map cleanly
-    onto SQL WHERE-clauses.
+    ``query`` is an optional full-text query matched against ``full_text``,
+    ``court_name`` and ``category`` (with field-level boosts). ``None``
+    means "no text query, filter-only" — empty strings are rejected so
+    callers don't accidentally send a blank search. The remaining fields
+    are exact-match / range filters that map onto ES ``term``/``range``
+    clauses. Facets and participant/norm predicates come in a later slice.
     """
 
     model_config = ConfigDict(extra="forbid")
+
+    query: str | None = Field(default=None, min_length=1, max_length=512)
 
     case_number: str | None = Field(default=None, min_length=1, max_length=256)
     court_type: CourtType | None = None
@@ -66,8 +71,10 @@ class DecisionListItem(BaseModel):
     """Lightweight list-item projection of a court decision.
 
     Omits heavy fields (`full_text`, `sections`, `raw_html`) and internal
-    flags. `snippet` is a cheap preview derived from the first ~300 chars
-    of `full_text`; proper highlighting will come with the ES slice.
+    flags. ``snippet`` is the first ES highlight fragment on ``full_text``
+    when a text query matched; otherwise it falls back to the first
+    ~300 chars of ``full_text`` so filter-only responses still render
+    a preview.
     """
 
     model_config = ConfigDict(from_attributes=True)
