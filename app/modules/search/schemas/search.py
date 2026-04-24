@@ -53,7 +53,16 @@ class SearchDecisionsRequest(BaseModel):
         ),
     )
 
-    page: int = Field(default=1, ge=1)
+    page: int = Field(
+        default=1,
+        ge=1,
+        le=100,
+        description=(
+            "1-based page number. Capped at 100 to stay below ES "
+            "`index.max_result_window`=10000 at page_size=100. For deeper "
+            "results use narrower filters or (future) search_after."
+        ),
+    )
     page_size: int = Field(default=20, ge=1, le=100)
 
     @model_validator(mode="after")

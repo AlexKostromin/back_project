@@ -637,3 +637,39 @@ async def test_search_sort_relevance_paginates_stably(
         item["id"] for item in p2_body["items"]
     ]
     assert len(set(ids)) == 4
+
+
+@pytest.mark.asyncio
+async def test_search_rejects_page_over_cap(
+    clean_search_tables, clean_es_index,
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/search/decisions",
+            json={"page": 101},
+        )
+
+    assert response.status_code == 422
+    # Best-effort sanity check on the error payload — Pydantic v2 wording
+    # for the ``le=100`` constraint may drift across versions, so accept
+    # either a mention of the field name or the canonical constraint phrase.
+    detail_blob = str(response.json()).lower()
+    assert "page" in detail_blob or "less than or equal" in detail_blob
+
+
+@pytest.mark.asyncio
+async def test_search_accepts_page_at_cap(
+    clean_search_tables, clean_es_index,
+) -> None:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        response = await client.post(
+            "/api/v1/search/decisions",
+            json={"page": 100, "page_size": 1},
+        )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 0
+    assert body["items"] == []
