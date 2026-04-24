@@ -6,6 +6,8 @@ from app.modules.search.repositories.es_court_decision import (
     EsCourtDecisionRepository,
 )
 from app.modules.search.schemas.search import (
+    FacetsRequest,
+    FacetsResponse,
     SearchDecisionsRequest,
     SearchDecisionsResponse,
 )
@@ -34,3 +36,6 @@ class SearchService:
             page_size=request.page_size,
             items=items,
         )
+
+    async def facets(self, request: FacetsRequest) -> FacetsResponse:
+        return await self._repo.facets(request)

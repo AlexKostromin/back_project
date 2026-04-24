@@ -10,7 +10,12 @@ from elasticsearch import AsyncElasticsearch
 from app.modules.search.schemas.enums import SortBy
 from app.modules.search.schemas.search import (
     DecisionListItem,
+    FacetBucket,
+    FacetsRequest,
+    FacetsResponse,
+    MonthBucket,
     SearchDecisionsRequest,
+    _DecisionsFilter,
 )
 
 log = structlog.get_logger(__name__)
@@ -73,22 +78,73 @@ class EsCourtDecisionRepository:
         items = [self._hit_to_item(hit) for hit in resp["hits"]["hits"]]
         return items, total
 
-    def _build_body(self, request: SearchDecisionsRequest) -> dict[str, Any]:
-        if request.query is not None:
-            must: dict[str, Any] = {
-                "multi_match": {
-                    "query": request.query,
-                    "fields": [
-                        "full_text",
-                        "court_name^2",
-                        "category^1.5",
-                    ],
-                    "type": "best_fields",
-                }
-            }
-        else:
-            must = {"match_all": {}}
+    async def facets(self, request: FacetsRequest) -> FacetsResponse:
+        """Run the same filter as :meth:`search` but aggregate instead of fetch.
 
+        ``size=0`` tells ES we don't need any hits — just the bucket
+        counts. ``track_total_hits=True`` keeps ``total`` accurate past
+        10k (demo jurimetrics on the full corpus shouldn't silently clip).
+        """
+
+        must = self._build_must(request.query)
+        filters = self._build_filters(request)
+
+        body: dict[str, Any] = {
+            "size": 0,
+            "query": {"bool": {"must": [must], "filter": filters}},
+            "track_total_hits": True,
+            "aggs": {
+                "court_type": {"terms": {"field": "court_type", "size": 10}},
+                "dispute_type": {"terms": {"field": "dispute_type", "size": 10}},
+                "result": {"terms": {"field": "result", "size": 10}},
+                "region": {"terms": {"field": "region.raw", "size": 20}},
+                "decisions_by_month": {
+                    "date_histogram": {
+                        "field": "decision_date",
+                        "calendar_interval": "month",
+                        "format": "yyyy-MM-dd",
+                        "min_doc_count": 1,
+                    }
+                },
+            },
+        }
+
+        log.info(
+            "search.decisions.es_facets",
+            index=self._index_name,
+            has_query=request.query is not None,
+        )
+
+        resp = await self._es.search(index=self._index_name, body=body)
+
+        total = int(resp["hits"]["total"]["value"])
+        aggs = resp["aggregations"]
+
+        def _terms_to_buckets(agg_name: str) -> list[FacetBucket]:
+            return [
+                FacetBucket(key=str(b["key"]), count=int(b["doc_count"]))
+                for b in aggs[agg_name]["buckets"]
+            ]
+
+        month_buckets = [
+            MonthBucket(
+                month=date.fromisoformat(b["key_as_string"]),
+                count=int(b["doc_count"]),
+            )
+            for b in aggs["decisions_by_month"]["buckets"]
+        ]
+
+        return FacetsResponse(
+            total=total,
+            court_type=_terms_to_buckets("court_type"),
+            dispute_type=_terms_to_buckets("dispute_type"),
+            result=_terms_to_buckets("result"),
+            region=_terms_to_buckets("region"),
+            decisions_by_month=month_buckets,
+        )
+
+    def _build_body(self, request: SearchDecisionsRequest) -> dict[str, Any]:
+        must = self._build_must(request.query)
         filters = self._build_filters(request)
         sort = self._build_sort(request.sort_by)
 
@@ -113,7 +169,31 @@ class EsCourtDecisionRepository:
         }
 
     @staticmethod
-    def _build_filters(request: SearchDecisionsRequest) -> list[dict[str, Any]]:
+    def _build_must(query: str | None) -> dict[str, Any]:
+        """Compile the ``must`` clause shared by search and facets.
+
+        A single source of truth for how we interpret ``query=None``
+        (match_all) vs. a non-empty string (multi_match with field
+        boosts). Kept as a staticmethod so both code paths can call it
+        without holding onto the repo instance.
+        """
+
+        if query is not None:
+            return {
+                "multi_match": {
+                    "query": query,
+                    "fields": [
+                        "full_text",
+                        "court_name^2",
+                        "category^1.5",
+                    ],
+                    "type": "best_fields",
+                }
+            }
+        return {"match_all": {}}
+
+    @staticmethod
+    def _build_filters(request: _DecisionsFilter) -> list[dict[str, Any]]:
         filters: list[dict[str, Any]] = []
 
         if request.case_number is not None:
