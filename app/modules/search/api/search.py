@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from elasticsearch import AsyncElasticsearch
 from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.session import get_session
+from app.core.config import Settings, get_settings
+from app.es.client import get_es
 from app.modules.search.schemas.search import (
     SearchDecisionsRequest,
     SearchDecisionsResponse,
@@ -17,11 +18,12 @@ router = APIRouter(prefix="/decisions", tags=["search:decisions"])
     "",
     response_model=SearchDecisionsResponse,
     status_code=status.HTTP_200_OK,
-    summary="Search court decisions by SQL filters (ES-ranked search comes later)",
+    summary="Full-text + filter search over Elasticsearch",
 )
 async def search_decisions(
     request: SearchDecisionsRequest,
-    session: AsyncSession = Depends(get_session),
+    es: AsyncElasticsearch = Depends(get_es),
+    settings: Settings = Depends(get_settings),
 ) -> SearchDecisionsResponse:
-    service = SearchService(session)
+    service = SearchService(es, index_name=settings.es_court_decisions_index)
     return await service.search(request)
