@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     scraper_connect_timeout: float = 5.0
     scraper_read_timeout: float = 30.0
 
+    kad_session_ttl_seconds: int = 23 * 3600
+    kad_session_headless: bool = True
+
     @field_validator("scraper_user_agent")
     @classmethod
     def _no_crlf(cls, v: str) -> str:
