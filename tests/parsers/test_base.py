@@ -186,3 +186,61 @@ async def test_get_pdf_override():
     parser = PdfParser()
     assert await parser.get_pdf("exists") == b"PDF content"
     assert await parser.get_pdf("missing") is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_and_parse_logs_hashed_source_id(monkeypatch):
+    """source_id in structlog calls must be a short hash, never the raw value."""
+    from app.parsers import base as base_module
+
+    captured: list[dict] = []
+
+    def fake_info(event: str, **kwargs):
+        captured.append({"event": event, **kwargs})
+
+    monkeypatch.setattr(base_module.logger, "info", fake_info)
+
+    class TraceParser(BaseParser):
+        source_key: ClassVar[str] = "trace"
+
+        async def crawl(self, *, date_from=None, date_to=None, limit=None):
+            yield  # pragma: no cover
+
+        async def fetch_document(self, source_id: str) -> RawDocument:
+            return RawDocument(
+                source_name=self.source_key,
+                source_id=source_id,
+                html='{"x": 1}',
+                url=None,
+                crawled_at=datetime.now(),
+            )
+
+        async def parse(self, raw: RawDocument) -> ParsedDecision:
+            return ParsedDecision(
+                source_name=self.source_key,
+                source_id=raw.source_id,
+                case_number="X",
+                court_name="X",
+                court_type=CourtType.ARBITRAZH,
+                instance_level=1,
+                decision_date=datetime.now().date(),
+                doc_type=DocType.DECISION,
+                judges=[],
+                result=ResultType.OTHER,
+                dispute_type=DisputeType.CIVIL,
+                participants=[],
+                full_text="x",
+                text_hash="a" * 64,
+                source_url="https://example.com/x",
+                crawled_at=raw.crawled_at,
+                parsed_at=datetime.now(),
+            )
+
+    raw_id = "ИНН7701234567"
+    await TraceParser().fetch_and_parse(raw_id)
+
+    assert len(captured) == 2
+    for entry in captured:
+        logged = entry["source_id"]
+        assert logged != raw_id, "raw source_id leaked into log"
+        assert len(logged) == 8 and all(c in "0123456789abcdef" for c in logged)

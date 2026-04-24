@@ -60,6 +60,7 @@ jobs:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
       - run: poetry install --with dev --no-interaction
+      - run: poetry run pip-audit --strict
       - run: poetry run alembic upgrade head
       - run: poetry run python scripts/ensure_es_index.py
       - run: poetry run pytest -v

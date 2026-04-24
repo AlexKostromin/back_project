@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -11,18 +12,20 @@ class ParserRegistry:
 
     def __init__(self) -> None:
         self._parsers: dict[str, type[BaseParser]] = {}
+        self._lock = threading.Lock()
 
     def register(self, parser_cls: type[BaseParser]) -> None:
         """Register a parser class by its source_key."""
-        source_key = parser_cls.source_key
+        with self._lock:
+            source_key = parser_cls.source_key
 
-        if not source_key or not source_key.strip():
-            raise ValueError("Parser source_key cannot be empty")
+            if not source_key or not source_key.strip():
+                raise ValueError("Parser source_key cannot be empty")
 
-        if source_key in self._parsers:
-            raise ValueError(f"Parser with source_key '{source_key}' already registered")
+            if source_key in self._parsers:
+                raise ValueError(f"Parser with source_key '{source_key}' already registered")
 
-        self._parsers[source_key] = parser_cls
+            self._parsers[source_key] = parser_cls
 
     def get(self, source_key: str) -> type[BaseParser]:
         """Get parser class by source_key."""

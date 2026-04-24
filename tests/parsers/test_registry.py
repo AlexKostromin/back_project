@@ -130,3 +130,28 @@ def test_available_returns_all_keys():
     assert sorted(registry.available()) == ["source_a", "source_b"]
 
 
+def test_register_is_thread_safe():
+    """Concurrent register() calls must not lose entries to a race."""
+    from concurrent.futures import ThreadPoolExecutor
+
+    registry = ParserRegistry()
+    parser_classes = []
+    for i in range(32):
+        cls = type(
+            f"Parser{i}",
+            (BaseParser,),
+            {
+                "source_key": f"source_{i}",
+                "crawl": DummyParser.crawl,
+                "fetch_document": DummyParser.fetch_document,
+                "parse": DummyParser.parse,
+            },
+        )
+        parser_classes.append(cls)
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(registry.register, parser_classes))
+
+    assert sorted(registry.available()) == sorted(f"source_{i}" for i in range(32))
+
+

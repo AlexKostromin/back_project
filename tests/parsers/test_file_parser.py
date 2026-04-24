@@ -246,3 +246,84 @@ async def test_text_hash_computation(tmp_fixtures_dir: Path):
     assert parsed.text_hash == expected_hash
     assert len(parsed.text_hash) == 64
     assert all(c in "0123456789abcdef" for c in parsed.text_hash)
+
+
+@pytest.mark.asyncio
+async def test_parse_rejects_oversized_json(tmp_fixtures_dir: Path):
+    """parse should reject JSON larger than MAX_JSON_SIZE_BYTES."""
+    from datetime import datetime, timezone
+    from app.parsers.schemas import RawDocument
+
+    parser = FileParser(tmp_fixtures_dir)
+
+    # Create a RawDocument with >10MB of content
+    large_content = "x" * (11 * 1024 * 1024)  # 11 MB
+    raw = RawDocument(
+        source_name="file",
+        source_id="oversized_doc",
+        html=large_content,
+        url=None,
+        crawled_at=datetime.now(timezone.utc),
+    )
+
+    with pytest.raises(ParseError, match="Document too large"):
+        await parser.parse(raw)
+
+
+def test_validate_path_rejects_null_byte(tmp_fixtures_dir: Path):
+    """_validate_path should reject filenames containing null bytes."""
+    parser = FileParser(tmp_fixtures_dir)
+
+    with pytest.raises(ValueError, match="Null byte in filename"):
+        parser._validate_path("file\x00.json")
+
+
+@pytest.mark.parametrize("filename", [
+    "CON.json",
+    "NUL.json",
+    "COM1.json",
+    "LPT9.json",
+    "con.json",
+    "Con.JSON",
+    "prn.json",
+    "aux.json",
+])
+def test_validate_path_rejects_windows_reserved_name(tmp_fixtures_dir: Path, filename: str):
+    """_validate_path should reject Windows reserved names."""
+    parser = FileParser(tmp_fixtures_dir)
+
+    with pytest.raises(ValueError, match="Reserved Windows filename"):
+        parser._validate_path(filename)
+
+
+@pytest.mark.asyncio
+async def test_parse_validation_error_message_is_generic(tmp_fixtures_dir: Path):
+    """ParseError message should not leak field-level validation details."""
+    parser = FileParser(tmp_fixtures_dir)
+    raw = await parser.fetch_document("invalid_missing_field")
+
+    with pytest.raises(ParseError) as exc_info:
+        await parser.parse(raw)
+
+    error_message = str(exc_info.value)
+    # Should not contain specific field names from the validation error
+    assert "source_url" not in error_message.lower()
+    assert "field required" not in error_message.lower()
+    # Should be generic
+    assert "Failed to parse document" in error_message
+
+
+@pytest.mark.asyncio
+async def test_parse_json_decode_error_message_is_generic(tmp_fixtures_dir: Path):
+    """ParseError for JSON decode errors should not leak JSON parsing details."""
+    parser = FileParser(tmp_fixtures_dir)
+    raw = await parser.fetch_document("invalid_json")
+
+    with pytest.raises(ParseError) as exc_info:
+        await parser.parse(raw)
+
+    error_message = str(exc_info.value)
+    # Should be generic, not contain JSON parser details in the exception message
+    assert "Failed to parse document" in error_message
+    # The original error details should be in __cause__, not in the message itself
+    assert exc_info.value.__cause__ is not None

@@ -4,6 +4,7 @@ import time
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator
 from datetime import date
+from hashlib import sha256
 from typing import ClassVar
 
 import structlog
@@ -11,6 +12,11 @@ import structlog
 from app.parsers.schemas import ParsedDecision, RawDocument
 
 logger = structlog.get_logger()
+
+
+def _safe_source_id(source_id: str) -> str:
+    """Return short hash; raw source_id may contain PII (ИНН/имя) for HTTP sources."""
+    return sha256(source_id.encode("utf-8")).hexdigest()[:8]
 
 
 class BaseParser(ABC):
@@ -61,7 +67,7 @@ class BaseParser(ABC):
         logger.info(
             "parser.fetch_and_parse.start",
             source=self.source_key,
-            source_id=source_id,
+            source_id=_safe_source_id(source_id),
         )
 
         raw = await self.fetch_document(source_id)
@@ -71,7 +77,7 @@ class BaseParser(ABC):
         logger.info(
             "parser.fetch_and_parse.complete",
             source=self.source_key,
-            source_id=source_id,
+            source_id=_safe_source_id(source_id),
             latency_ms=round(elapsed * 1000, 2),
         )
 
