@@ -45,7 +45,13 @@ class SearchDecisionsRequest(BaseModel):
     claim_amount_min: Decimal | None = Field(default=None, ge=0)
     claim_amount_max: Decimal | None = Field(default=None, ge=0)
 
-    sort_by: SortBy = SortBy.DATE_DESC
+    sort_by: SortBy = Field(
+        default=SortBy.DATE_DESC,
+        description=(
+            "`relevance` requires a non-empty `query`, otherwise every "
+            "document has the same score and the order is meaningless."
+        ),
+    )
 
     page: int = Field(default=1, ge=1)
     page_size: int = Field(default=20, ge=1, le=100)
@@ -64,6 +70,12 @@ class SearchDecisionsRequest(BaseModel):
             and self.claim_amount_min > self.claim_amount_max
         ):
             raise ValueError("claim_amount_min must be <= claim_amount_max")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_relevance_requires_query(self) -> Self:
+        if self.sort_by is SortBy.RELEVANCE and self.query is None:
+            raise ValueError("sort_by=relevance requires query")
         return self
 
 

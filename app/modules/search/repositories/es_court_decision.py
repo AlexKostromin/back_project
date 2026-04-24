@@ -154,6 +154,10 @@ class EsCourtDecisionRepository:
 
     @staticmethod
     def _build_sort(sort_by: SortBy) -> list[dict[str, str]]:
+        if sort_by is SortBy.RELEVANCE:
+            # ``id`` as tiebreaker keeps page boundaries stable when
+            # multiple hits share the same ``_score``.
+            return [{"_score": "desc"}, {"id": "desc"}]
         if sort_by is SortBy.DATE_ASC:
             return [{"decision_date": "asc"}, {"id": "asc"}]
         return [{"decision_date": "desc"}, {"id": "desc"}]
