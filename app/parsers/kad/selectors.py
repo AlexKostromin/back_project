@@ -159,11 +159,12 @@ def extract_judges(soup: BeautifulSoup) -> list[str]:
 
 
 def extract_document_refs(soup: BeautifulSoup) -> list[DocumentRef]:
-    """Extract document references from case chronology.
+    """DEPRECATED: Documents come from CaseDocumentsPage AJAX, not card HTML.
 
-    Note: В статичной фикстуре chrono_ed_content пустой (загружается динамически).
-    Этот селектор вернёт пустой список для такой фикстуры.
-    Полноценный парсинг документов будет реализован в Stage 3d.
+    Use chronology.parse_chronology_response() instead.
+
+    This function always returns empty list because static card HTML does not contain
+    document chronology — it's loaded dynamically via separate endpoint.
     """
-    logger.debug("kad.selector.document_refs.not_implemented_yet")
+    logger.debug("kad.selector.document_refs.deprecated")
     return []
