@@ -18,7 +18,7 @@ router = APIRouter(prefix="/ingest", tags=["search:ingest"])
     "/decision",
     response_model=IngestResult,
     status_code=status.HTTP_200_OK,
-    summary="Ingest a single RawDecision from the parser",
+    summary="Приём одного RawDecision от парсера",
 )
 async def ingest_decision(
     raw: RawDecision,
@@ -26,6 +26,7 @@ async def ingest_decision(
     es: AsyncElasticsearch = Depends(get_es),
     settings: Settings = Depends(get_settings),
 ) -> IngestResult:
+    """Принимает разобранное решение от парсера и сохраняет его в БД и ES."""
     processor = DecisionProcessor(
         session,
         es,
