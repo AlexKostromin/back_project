@@ -60,7 +60,11 @@ jobs:
           path: .venv
           key: venv-${{ runner.os }}-${{ hashFiles('poetry.lock') }}
       - run: poetry install --with dev --no-interaction
-      - run: poetry run pip-audit --strict
+      # CVE-2026-3219: pip ≤26.0.1 dual-archive (tar+ZIP) interpretation
+      # confusion. Local + UI:R; not reachable here — pip in CI/Docker builds
+      # only installs from our pinned poetry.lock, never an untrusted archive.
+      # Drop --ignore-vuln once pip 26.1 ships on PyPI.
+      - run: poetry run pip-audit --strict --ignore-vuln CVE-2026-3219
       - run: poetry run alembic upgrade head
       - run: poetry run python scripts/ensure_es_index.py
       - run: poetry run pytest -v
