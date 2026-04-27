@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 from pathlib import Path
 
@@ -243,3 +244,27 @@ async def test_health_check_returns_false_on_exception() -> None:
         result = await parser.health_check()
 
         assert result is False
+
+
+def test_parse_chronology_extracts_documents() -> None:
+    """Parse chronology should extract documents from CaseDocumentsPage response."""
+    fixture_path = Path(__file__).parent.parent / "fixtures" / "kad_documents_response.json"
+    payload = json.loads(fixture_path.read_text(encoding="utf-8"))
+
+    parser = KadArbitrParser()
+    refs = parser.parse_chronology(payload)
+
+    assert len(refs) == 3
+    assert all(ref.document_id for ref in refs)
+    assert all(ref.document_date for ref in refs)
+    assert all(ref.url for ref in refs)
+
+
+def test_parse_chronology_raises_on_invalid_payload() -> None:
+    """Parse chronology should raise ValueError on invalid payload."""
+    parser = KadArbitrParser()
+
+    with pytest.raises(ValueError) as exc_info:
+        parser.parse_chronology({"Success": False})
+
+    assert "Success != True" in str(exc_info.value)

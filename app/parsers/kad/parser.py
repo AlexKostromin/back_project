@@ -9,7 +9,8 @@ from bs4 import BeautifulSoup
 from app.parsers.base import BaseParser
 from app.parsers.http import ResilientHttpClient
 from app.parsers.kad import selectors
-from app.parsers.kad.schemas import KadCaseSummary
+from app.parsers.kad.chronology import parse_chronology_response
+from app.parsers.kad.schemas import DocumentRef, KadCaseSummary
 from app.parsers.schemas import CourtType, ParsedDecision, RawDocument
 
 logger = structlog.get_logger(__name__)
@@ -90,6 +91,9 @@ class KadArbitrParser(BaseParser):
 
         Sync function (BS4 — CPU-bound, no I/O), returns summary.
         case_id and source_url are passed explicitly because URL cannot always be reliably recovered from card HTML.
+
+        Note: document_refs will always be empty — documents come from separate AJAX call.
+        Use parse_chronology() to populate documents from CaseDocumentsPage response.
         """
         soup = BeautifulSoup(html, "lxml")
 
@@ -100,7 +104,6 @@ class KadArbitrParser(BaseParser):
         dispute_category = selectors.extract_dispute_category(soup)
         parties = selectors.extract_parties(soup)
         judges = selectors.extract_judges(soup)
-        document_refs = selectors.extract_document_refs(soup)
 
         if extracted_case_id != case_id:
             logger.warning(
@@ -119,7 +122,24 @@ class KadArbitrParser(BaseParser):
             dispute_category=dispute_category,
             parties=parties,
             judges=judges,
-            document_refs=document_refs,
+            document_refs=[],
             source_url=source_url,
             crawled_at=datetime.now(timezone.utc),
         )
+
+    def parse_chronology(self, payload: dict) -> list[DocumentRef]:
+        """Parse CaseDocumentsPage AJAX response to list of DocumentRef.
+
+        Sync function (JSON parsing — CPU-bound, no I/O).
+        Wrapper over chronology.parse_chronology_response.
+
+        Args:
+            payload: Parsed JSON response from /Kad/CaseDocumentsPage
+
+        Returns:
+            List of DocumentRef objects
+
+        Raises:
+            ValueError: If payload is invalid
+        """
+        return parse_chronology_response(payload)
