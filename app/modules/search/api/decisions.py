@@ -14,11 +14,12 @@ router = APIRouter(prefix="/decisions", tags=["search:decisions"])
     "/{decision_id}",
     response_model=DecisionResponse,
     status_code=status.HTTP_200_OK,
-    summary="Get a court decision by id with participants and norms",
+    summary="Карточка судебного решения по id с участниками и нормами",
 )
 async def get_decision(
     decision_id: int,
     session: AsyncSession = Depends(get_session),
 ) -> DecisionResponse:
+    """Возвращает полную карточку решения: метаданные, участников и нормы."""
     service = DecisionService(session)
     return await service.get(decision_id)

@@ -45,10 +45,11 @@ class RawSections(BaseModel):
 
 
 class RawDecision(BaseModel):
-    """Input contract for the parser side.
+    """Входной контракт со стороны парсера.
 
-    The parser must produce objects matching this schema. Any drift is a
-    contract violation and should be caught at ingest time, not in the pipeline.
+    Парсер обязан выдавать объекты, соответствующие этой схеме. Любое
+    расхождение — это нарушение контракта; его нужно ловить на этапе
+    приёма, а не где-то дальше в пайплайне.
     """
 
     model_config = ConfigDict(extra="forbid")

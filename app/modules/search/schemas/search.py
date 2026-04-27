@@ -17,11 +17,11 @@ from app.modules.search.schemas.enums import (
 
 
 class _DecisionsFilter(BaseModel):
-    """Shared filter set for POST /decisions (search) and /decisions/facets.
+    """Общий набор фильтров для POST /decisions (поиск) и /decisions/facets.
 
-    Everything here compiles to an ES bool/filter + optional multi_match
-    must. Downstream requests layer on top whatever extra fields they need
-    (pagination, sort, etc.).
+    Все поля здесь транслируются в ES bool/filter плюс опциональный
+    multi_match в must. Конкретные запросы поверх добавляют свои
+    дополнительные поля (пагинация, сортировка и т. п.).
     """
 
     model_config = ConfigDict(
@@ -29,15 +29,19 @@ class _DecisionsFilter(BaseModel):
         json_schema_extra={
             "examples": [
                 {
-                    "summary": "Filter-only default",
-                    "description": "No text query, default sort (date desc), first page of 20.",
+                    "summary": "По умолчанию: только фильтры",
+                    "description": (
+                        "Без полнотекстового запроса, сортировка по "
+                        "умолчанию (дата по убыванию), первая страница "
+                        "из 20 элементов."
+                    ),
                     "value": {},
                 },
                 {
-                    "summary": "Relevance search",
+                    "summary": "Поиск по релевантности",
                     "description": (
-                        "BM25 over full_text/court_name/category with the "
-                        "Russian analyzer. Sort by _score."
+                        "BM25 по `full_text`/`court_name`/`category` с "
+                        "русским анализатором. Сортировка по `_score`."
                     ),
                     "value": {
                         "query": "налог",
@@ -46,10 +50,10 @@ class _DecisionsFilter(BaseModel):
                     },
                 },
                 {
-                    "summary": "Narrow by court + period",
+                    "summary": "Сужение по суду и периоду",
                     "description": (
-                        "Pure filter request — arbitrazh courts in Moscow "
-                        "for the 2025 calendar year."
+                        "Чисто фильтровой запрос — арбитражные суды "
+                        "Москвы за 2025 календарный год."
                     ),
                     "value": {
                         "court_type": "arbitrazh",
@@ -59,11 +63,11 @@ class _DecisionsFilter(BaseModel):
                     },
                 },
                 {
-                    "summary": "Combined query and filters",
+                    "summary": "Запрос вместе с фильтрами",
                     "description": (
-                        "Full-text 'поставка' within arbitrazh, "
-                        "relevance-ranked. Shows must + filter combining "
-                        "cleanly."
+                        "Полнотекстовый запрос 'поставка' среди "
+                        "арбитражных дел, ранжирование по релевантности. "
+                        "Демонстрирует чистое сочетание `must` и `filter`."
                     ),
                     "value": {
                         "query": "поставка",
@@ -109,15 +113,16 @@ class _DecisionsFilter(BaseModel):
 
 
 class SearchDecisionsRequest(_DecisionsFilter):
-    """Elasticsearch-backed search request for court decisions.
+    """Запрос поиска судебных решений на базе Elasticsearch.
 
-    Inherits the shared filter set (text query + exact/range predicates)
-    from :class:`_DecisionsFilter` and layers on pagination and sort. The
-    ``query`` field is an optional full-text query matched against
-    ``full_text``, ``court_name`` and ``category`` (with field-level
-    boosts); ``None`` means "filter-only". Empty strings are rejected so
-    callers don't accidentally send a blank search. Facets and
-    participant/norm predicates come in a later slice.
+    Наследует общий набор фильтров (полнотекстовый запрос плюс
+    точные/диапазонные предикаты) от :class:`_DecisionsFilter` и
+    добавляет пагинацию и сортировку. Поле ``query`` — необязательный
+    полнотекстовый запрос, который сопоставляется с ``full_text``,
+    ``court_name`` и ``category`` (с бустами на уровне полей);
+    ``None`` означает «только фильтры». Пустые строки отвергаются,
+    чтобы клиент случайно не отправил пустой поиск. Facets и
+    предикаты по участникам/нормам появятся в следующих слайсах.
     """
 
     # Pydantic v2 merges model_config across inheritance, but re-declaring
@@ -127,8 +132,8 @@ class SearchDecisionsRequest(_DecisionsFilter):
     sort_by: SortBy = Field(
         default=SortBy.DATE_DESC,
         description=(
-            "`relevance` requires a non-empty `query`, otherwise every "
-            "document has the same score and the order is meaningless."
+            "`relevance` требует непустой `query`, иначе у всех "
+            "документов одинаковый score и порядок теряет смысл."
         ),
     )
 
@@ -137,9 +142,11 @@ class SearchDecisionsRequest(_DecisionsFilter):
         ge=1,
         le=100,
         description=(
-            "1-based page number. Capped at 100 to stay below ES "
-            "`index.max_result_window`=10000 at page_size=100. For deeper "
-            "results use narrower filters or (future) search_after."
+            "Номер страницы (от 1). Ограничен 100, чтобы оставаться "
+            "ниже ES `index.max_result_window`=10000 при "
+            "`page_size=100`. Для более глубоких результатов "
+            "используйте более узкие фильтры или (в будущем) "
+            "`search_after`."
         ),
     )
     page_size: int = Field(default=20, ge=1, le=100)
@@ -152,12 +159,12 @@ class SearchDecisionsRequest(_DecisionsFilter):
 
 
 class FacetsRequest(_DecisionsFilter):
-    """Aggregation request: same filter set as search, no pagination/sort.
+    """Запрос агрегаций: тот же набор фильтров, без пагинации и сортировки.
 
-    Pagination is meaningless for aggregations — we always return the
-    full top-K buckets per facet. Sort is meaningless too: buckets are
-    ordered by their natural key (count desc for terms, chronological
-    for date_histogram).
+    Пагинация для агрегаций бессмысленна — всегда возвращаем top-K
+    бакетов по каждому facet. Сортировка тоже не нужна: бакеты
+    упорядочены по своему естественному ключу (count по убыванию для
+    terms, хронологически для date_histogram).
     """
 
     # No extra fields — intentionally empty. Kept as a distinct class so
@@ -166,13 +173,13 @@ class FacetsRequest(_DecisionsFilter):
 
 
 class DecisionListItem(BaseModel):
-    """Lightweight list-item projection of a court decision.
+    """Облегчённая проекция судебного решения для списка.
 
-    Omits heavy fields (`full_text`, `sections`, `raw_html`) and internal
-    flags. ``snippet`` is the first ES highlight fragment on ``full_text``
-    when a text query matched; otherwise it falls back to the first
-    ~300 chars of ``full_text`` so filter-only responses still render
-    a preview.
+    Опускает тяжёлые поля (`full_text`, `sections`, `raw_html`) и
+    внутренние флаги. Поле ``snippet`` — первый highlight-фрагмент ES
+    по ``full_text``, когда сработал полнотекстовый запрос; иначе
+    подставляются первые ~300 символов ``full_text``, чтобы у ответов
+    «только по фильтрам» всё равно был превью.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -192,6 +199,8 @@ class DecisionListItem(BaseModel):
 
 
 class SearchDecisionsResponse(BaseModel):
+    """Постраничный ответ поиска: метаданные пагинации и список решений."""
+
     model_config = ConfigDict(extra="forbid")
 
     total: int
@@ -201,7 +210,7 @@ class SearchDecisionsResponse(BaseModel):
 
 
 class FacetBucket(BaseModel):
-    """One row of a terms aggregation."""
+    """Одна строка terms-агрегации."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -210,7 +219,7 @@ class FacetBucket(BaseModel):
 
 
 class MonthBucket(BaseModel):
-    """One row of the ``decisions_by_month`` date_histogram."""
+    """Одна строка date_histogram ``decisions_by_month``."""
 
     model_config = ConfigDict(extra="forbid")
 
@@ -219,6 +228,8 @@ class MonthBucket(BaseModel):
 
 
 class FacetsResponse(BaseModel):
+    """Ответ с агрегациями: счётчики по основным фильтрам и распределение по месяцам."""
+
     model_config = ConfigDict(extra="forbid")
 
     total: int

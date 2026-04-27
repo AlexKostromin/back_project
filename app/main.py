@@ -10,7 +10,26 @@ settings = get_settings()
 # our registered ``Exception`` handler runs and returns a plain-text traceback
 # to the client — violating "Never expose stack traces to clients" (CLAUDE.md).
 # ``settings.app_debug`` still drives other dev-only behavior (SQL echo, etc.).
-app = FastAPI(title=settings.app_name, version=settings.app_version)
+app = FastAPI(
+    title=settings.app_name,
+    version=settings.app_version,
+    description=(
+        "Backend LexInsight — поиск по корпусу судебных решений. "
+        "BM25 с русским анализатором, фильтры по полям дела и агрегации "
+        "для юриметрии. Дополнительно: приём решений от парсеров и "
+        "выдача карточки решения по id."
+    ),
+    openapi_tags=[
+        {
+            "name": "search:decisions",
+            "description": "Поиск решений: BM25 + фильтры + facets.",
+        },
+        {
+            "name": "search:ingest",
+            "description": "Приём решений от парсеров.",
+        },
+    ],
+)
 
 register_exception_handlers(app)
 

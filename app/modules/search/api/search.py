@@ -20,15 +20,15 @@ router = APIRouter(prefix="/decisions", tags=["search:decisions"])
     "",
     response_model=SearchDecisionsResponse,
     status_code=status.HTTP_200_OK,
-    summary="Full-text + filter search over Elasticsearch",
+    summary="Полнотекстовый поиск и фильтрация по Elasticsearch",
     description=(
-        "Run a bool-query against Elasticsearch: `multi_match` on "
-        "`full_text`/`court_name`/`category` with Russian analyzer when "
-        "`query` is set; `term`/`range` filters for enums and ranges. "
-        "Snippets come from ES highlight, falling back to the first 300 "
-        "chars of `full_text` on filter-only requests. "
-        "`sort_by=relevance` requires a `query`; deep pagination is "
-        "capped at page=100 (see schema)."
+        "Выполняет bool-запрос к Elasticsearch: `multi_match` по "
+        "`full_text`/`court_name`/`category` с русским анализатором, "
+        "когда задан `query`; `term`/`range` фильтры для enum-ов и "
+        "диапазонов. Snippet берётся из ES highlight, а для запросов "
+        "только по фильтрам — из первых 300 символов `full_text`. "
+        "`sort_by=relevance` требует непустой `query`; глубокая "
+        "пагинация ограничена `page=100` (см. схему)."
     ),
 )
 async def search_decisions(
@@ -36,10 +36,11 @@ async def search_decisions(
     es: AsyncElasticsearch = Depends(get_es),
     settings: Settings = Depends(get_settings),
 ) -> SearchDecisionsResponse:
-    """Search court decisions over Elasticsearch.
+    """Поиск судебных решений через Elasticsearch.
 
-    See the request schema examples for common patterns: filter-only,
-    relevance, court+period narrowing, and query+filters combined.
+    Типичные сценарии смотрите в примерах схемы запроса: только
+    фильтры, поиск по релевантности, сужение по суду и периоду, а
+    также комбинация полнотекстового запроса и фильтров.
     """
     service = SearchService(es, index_name=settings.es_court_decisions_index)
     return await service.search(request)
@@ -49,12 +50,13 @@ async def search_decisions(
     "/facets",
     response_model=FacetsResponse,
     status_code=status.HTTP_200_OK,
-    summary="Aggregations for court decisions (terms + date_histogram)",
+    summary="Агрегации по судебным решениям (terms + date_histogram)",
     description=(
-        "Return facet buckets for the same filter set as `/decisions`: "
-        "terms on `court_type`, `dispute_type`, `result`, `region.raw`; "
-        "`date_histogram` on `decision_date` by month. "
-        "No pagination or sort — aggregations are always top-K."
+        "Возвращает facet-бакеты для того же набора фильтров, что и "
+        "`/decisions`: terms по `court_type`, `dispute_type`, `result`, "
+        "`region.raw`; `date_histogram` по `decision_date` с шагом "
+        "в месяц. Пагинации и сортировки нет — агрегации всегда "
+        "возвращают top-K."
     ),
 )
 async def search_decisions_facets(
@@ -62,7 +64,7 @@ async def search_decisions_facets(
     es: AsyncElasticsearch = Depends(get_es),
     settings: Settings = Depends(get_settings),
 ) -> FacetsResponse:
-    """Aggregation endpoint paired with `/decisions` for jurimetrics UI."""
+    """Эндпойнт агрегаций, парный к `/decisions`, для UI юриметрии."""
 
     service = SearchService(es, index_name=settings.es_court_decisions_index)
     return await service.facets(request)

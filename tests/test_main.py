@@ -54,8 +54,8 @@ async def test_openapi_exposes_search_request_examples() -> None:
 
     summaries = {e["summary"] for e in examples}
     assert summaries == {
-        "Filter-only default",
-        "Relevance search",
-        "Narrow by court + period",
-        "Combined query and filters",
+        "По умолчанию: только фильтры",
+        "Поиск по релевантности",
+        "Сужение по суду и периоду",
+        "Запрос вместе с фильтрами",
     }
