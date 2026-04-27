@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import hashlib
 from datetime import datetime, timezone
-from typing import Any
 
 import structlog
 from elasticsearch import AsyncElasticsearch
@@ -12,6 +11,7 @@ from app.db.models import CourtDecision, DecisionNorm, DecisionParticipant
 from app.modules.search.repositories.court_decision import CourtDecisionRepository
 from app.modules.search.schemas.ingest import IngestResult, IngestStatus
 from app.modules.search.schemas.raw_decision import RawDecision
+from app.modules.search.services.es_document import serialize_decision
 
 log = structlog.get_logger(__name__)
 
@@ -94,69 +94,12 @@ class DecisionProcessor:
         await self._es.index(
             index=self._index_name,
             id=str(decision.id),
-            document=self._serialize(decision),
+            document=serialize_decision(decision),
             # wait_for so the doc is searchable by the time we return. Cheap
             # for a single ingest; we'll switch to async refresh once bulk
             # indexing lands.
             refresh="wait_for",
         )
-
-    @staticmethod
-    def _serialize(decision: CourtDecision) -> dict[str, Any]:
-        return {
-            "id": decision.id,
-            "source_id": decision.source_id,
-            "source_name": decision.source_name,
-            "case_number": decision.case_number,
-            "court_name": decision.court_name,
-            "court_type": decision.court_type,
-            "instance_level": decision.instance_level,
-            "region": decision.region,
-            "decision_date": decision.decision_date.isoformat(),
-            "publication_date": (
-                decision.publication_date.isoformat()
-                if decision.publication_date is not None
-                else None
-            ),
-            "doc_type": decision.doc_type,
-            "judges": list(decision.judges),
-            "result": decision.result,
-            "appeal_status": decision.appeal_status,
-            "dispute_type": decision.dispute_type,
-            "category": decision.category,
-            "claim_amount": (
-                float(decision.claim_amount)
-                if decision.claim_amount is not None
-                else None
-            ),
-            "full_text": decision.full_text,
-            "text_hash": decision.text_hash,
-            "source_url": decision.source_url,
-            "minio_path": decision.minio_path,
-            "crawled_at": decision.crawled_at.isoformat(),
-            "parsed_at": decision.parsed_at.isoformat(),
-            "created_at": decision.created_at.isoformat(),
-            "updated_at": decision.updated_at.isoformat(),
-            "participants": [
-                {
-                    "name": p.name,
-                    "role": p.role,
-                    "inn": p.inn,
-                    "ogrn": p.ogrn,
-                }
-                for p in decision.participants
-            ],
-            "norms": [
-                {
-                    "law_name": n.law_name,
-                    "article": n.article,
-                    "part": n.part,
-                    "paragraph": n.paragraph,
-                    "raw_ref": n.raw_ref,
-                }
-                for n in decision.norms
-            ],
-        }
 
     @staticmethod
     def _to_model(raw: RawDecision, text_hash: str) -> CourtDecision:
