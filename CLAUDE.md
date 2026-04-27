@@ -139,6 +139,19 @@ The project has two developers pushing to one repo — local state goes stale fa
 - **Before reporting a slice as "done" to the user**: verify `git status` is clean on the branch, the branch is pushed, and CI is either green or actively running. Quietly leaving uncommitted files in the working tree has burned this project before — no exceptions.
 - **Never hoard work on a long-lived local branch.** If a single local branch accumulates more than one concern's worth of changes, stop and cut it into PR-sized slices *before* adding more.
 
+### Commit messages and PR descriptions — Russian
+
+The team and stakeholders read these in Russian. Write them in Russian by default.
+
+- **Conventional-commit prefix stays English.** `feat(search):`, `chore(ci):`, `fix(parsers):` etc. — это машинно-читаемая часть, нужна для changelog'а и автоматизаций. Префикс не переводим.
+- **После префикса — описание на русском.** Пример: `feat(search): добавить /decisions/{id}/summary через GigaChat`.
+- **Тело коммита — на русском.** Объясняй "зачем", не "что" (см. правило выше про commit messages).
+- **PR title:** `<type>(<scope>): <русское описание>`.
+- **PR body — на русском, заголовки секций тоже на русском.** Используй `## Что сделано` / `## Файлы` / `## Как проверить` (вместо `## Summary` / `## Files` / `## Test plan`). Маркдаун-чек-листы (`- [x]`) и встроенный код — без изменений.
+- **Технические термины** (BM25, multi_match, OAuth2, async, Pydantic, ES, RRF) и имена кода (имена файлов, функций, типов, веток) — оставляй как есть, не переводи.
+- **Co-Authored-By trailer и ссылка `🤖 Generated with [Claude Code]`** — оставлять как есть, это служебная мета.
+- Это правило применяется к новым коммитам и PR начиная с момента его внесения. Старые сообщения не переписывать.
+
 ## Coding Rules
 
 ### General
