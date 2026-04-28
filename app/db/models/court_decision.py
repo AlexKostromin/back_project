@@ -5,13 +5,14 @@ from decimal import Decimal
 from typing import TYPE_CHECKING
 
 import sqlalchemy as sa
-from sqlalchemy import BigInteger, Date, DateTime, Numeric, String, Text, func
+from sqlalchemy import BigInteger, Date, DateTime, ForeignKey, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
 if TYPE_CHECKING:
+    from app.db.models.case import Case
     from app.db.models.decision_norm import DecisionNorm
     from app.db.models.decision_participant import DecisionParticipant
 
@@ -20,6 +21,14 @@ class CourtDecision(Base):
     __tablename__ = "search_court_decisions"
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+
+    case_id: Mapped[int | None] = mapped_column(
+        BigInteger,
+        ForeignKey("cases.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+        comment="FK to cases table. NULL during migration phase (coexistence period)",
+    )
 
     source_id: Mapped[str] = mapped_column(Text, nullable=False)
     source_name: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -68,6 +77,11 @@ class CourtDecision(Base):
         nullable=False,
     )
 
+    case: Mapped[Case | None] = relationship(
+        "Case",
+        back_populates="decisions",
+        lazy="selectin",
+    )
     participants: Mapped[list[DecisionParticipant]] = relationship(
         back_populates="decision",
         cascade="all, delete-orphan",
