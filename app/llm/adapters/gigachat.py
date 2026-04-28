@@ -21,6 +21,7 @@ from app.llm.exceptions import (
     LLMTimeoutError,
 )
 from app.llm.gateway import LLMGateway
+from app.modules.search.schemas.search import SearchDecisionsRequest
 from app.modules.search.schemas.summary import DecisionSummary
 
 log = structlog.get_logger(__name__)
@@ -43,6 +44,55 @@ _SYSTEM_PROMPT = (
 # токен невалидным. Защита от race на границе TTL: сетевая задержка
 # + clock skew легко съедают пару секунд, поэтому 60 — практичный буфер.
 _TOKEN_REFRESH_LEEWAY_SECONDS = 60
+
+
+# System prompt для NLQ-парсера. Жёстко перечисляем все допустимые
+# поля и enum-значения — без этого LLM с радостью галлюцинирует
+# "court_type": "верховный" и валится на ValidationError. Маппинги
+# семантики собраны из реальных юридических формулировок, чтобы
+# покрыть бытовой язык юриста ("истец выиграл", "налоговые споры").
+_NLQ_SYSTEM_PROMPT = (
+    "Ты — парсер юридических поисковых запросов. Получая фразу "
+    "пользователя, возвращаешь СТРОГО валидный JSON со структурой:\n\n"
+    "{\n"
+    '  "query": <строка|null>,           '
+    "// ключевые слова для полнотекстового поиска (без имён сторон, без дат)\n"
+    '  "court_type": <enum|null>,        '
+    '// допустимо: "arbitrazh", "soy", "ks", "vs", "fas"\n'
+    '  "region": <строка|null>,          '
+    '// например: "Москва", "Санкт-Петербург"\n'
+    '  "doc_type": <enum|null>,          '
+    "// допустимо: "
+    '"решение", "постановление", "определение", "приговор", "письмо", '
+    '"особое_мнение"\n'
+    '  "dispute_type": <enum|null>,      '
+    '// допустимо: "admin", "civil", "bankruptcy", "criminal"\n'
+    '  "result": <enum|null>,            '
+    '// допустимо: "satisfied", "partial", "denied", "returned", "other"\n'
+    '  "appeal_status": <enum|null>,     '
+    '// допустимо: "appealed", "overturned", "partial_overturned", '
+    '"upheld", "none"\n'
+    '  "case_number": <строка|null>,     '
+    '// например: "А40-12345/2025"\n'
+    '  "date_from": <YYYY-MM-DD|null>,\n'
+    '  "date_to": <YYYY-MM-DD|null>,\n'
+    '  "claim_amount_min": <число|null>,\n'
+    '  "claim_amount_max": <число|null>,\n'
+    '  "sort_by": <"relevance"|"date_desc"|"date_asc">  '
+    "// если запрос содержит ключевые слова — "
+    '"relevance", иначе "date_desc"\n'
+    "}\n\n"
+    "Маппинг семантики:\n"
+    '- "истец/работник/налогоплательщик выиграл" → result="satisfied"\n'
+    '- "проиграл/отказали" → result="denied"\n'
+    '- "налоговые споры" → dispute_type="admin"\n'
+    '- "о банкротстве" → dispute_type="bankruptcy"\n'
+    '- "арбитражные суды/АС" → court_type="arbitrazh"\n'
+    '- "СОЮ/районный суд/мировой суд" → court_type="soy"\n'
+    '- "за 2025" → date_from="2025-01-01", date_to="2025-12-31"\n'
+    "- если поле непонятно — оставляй null, не угадывай.\n\n"
+    "Не добавляй пояснений, не оборачивай в код-блоки, только JSON."
+)
 
 
 class GigaChatAdapter(LLMGateway):
@@ -115,10 +165,175 @@ class GigaChatAdapter(LLMGateway):
         """
 
         truncated = self._truncate_input(text)
-        token = await self._get_token()
 
-        payload = self._build_chat_payload(truncated)
+        payload = self._build_chat_payload(
+            system_prompt=_SYSTEM_PROMPT,
+            user_prompt=f"Текст решения:\n\n{truncated}",
+            temperature=0.2,
+        )
         started = time.perf_counter()
+        data = await self._chat_with_token_refresh(payload)
+        latency_ms = int((time.perf_counter() - started) * 1000)
+
+        summary = self._parse_summary(data)
+
+        log.info(
+            "llm.summarize",
+            prompt_hash=_hash_for_audit(truncated),
+            tokens_used=summary.tokens_used,
+            latency_ms=latency_ms,
+            model=self._settings.gigachat_model,
+        )
+        return summary
+
+    async def parse_search_query(
+        self, text: str
+    ) -> tuple[SearchDecisionsRequest, int]:
+        """Распарсить натуральный текст в ``SearchDecisionsRequest``.
+
+        Контракт отличается от ``summarize`` одним важным моментом: на
+        «частичное понимание» (LLM вернул не-JSON или невалидный набор
+        полей) мы НЕ raise'им ``LLMResponseError``. NLQ — это UX-слой,
+        и для пользователя лучше показать выдачу по degraded-фильтру
+        ``query=text``, чем 502. Auth/rate/timeout/сетевые сбои
+        по-прежнему улетают как ``LLMError``-семья и маппятся в 502/503/504.
+        """
+
+        # Cap уже стоит в Pydantic-схеме (max_length=512), но если
+        # gateway дёрнут напрямую — пусть страховка тоже отрабатывает.
+        truncated = self._truncate_input(text)
+        text_hash = _hash_for_audit(truncated)
+
+        payload = self._build_chat_payload(
+            system_prompt=_NLQ_SYSTEM_PROMPT,
+            user_prompt=f"Запрос пользователя:\n\n{truncated}",
+            # Низкая температура: парсер должен быть детерминированным,
+            # одинаковый текст → одинаковый JSON. Креативность тут
+            # вредит, она же провоцирует галлюцинации в enum-полях.
+            temperature=0.1,
+        )
+        started = time.perf_counter()
+        data = await self._chat_with_token_refresh(payload)
+        latency_ms = int((time.perf_counter() - started) * 1000)
+
+        try:
+            content = data["choices"][0]["message"]["content"]
+            total_tokens = int(data["usage"]["total_tokens"])
+        except (KeyError, IndexError, TypeError, ValueError) as exc:
+            # Контракт самой OpenAI-обёртки нарушен — это уже не
+            # «LLM не понял», это сломанный провайдер. 502.
+            raise LLMResponseError(
+                "LLM response is missing required fields"
+            ) from exc
+
+        try:
+            parsed = json.loads(content)
+        except json.JSONDecodeError:
+            log.warning(
+                "nlq.parse_failed",
+                reason="non_json",
+                text_hash=text_hash,
+                tokens_used=total_tokens,
+                latency_ms=latency_ms,
+            )
+            return self._nlq_fallback(truncated), total_tokens
+
+        if not isinstance(parsed, dict):
+            log.warning(
+                "nlq.parse_failed",
+                reason="non_object",
+                text_hash=text_hash,
+                tokens_used=total_tokens,
+                latency_ms=latency_ms,
+            )
+            return self._nlq_fallback(truncated), total_tokens
+
+        try:
+            request = SearchDecisionsRequest.model_validate(parsed)
+        except ValidationError:
+            log.warning(
+                "nlq.parse_failed",
+                reason="validation",
+                text_hash=text_hash,
+                tokens_used=total_tokens,
+                latency_ms=latency_ms,
+            )
+            return self._nlq_fallback(truncated), total_tokens
+
+        # Логируем только имена заполненных фильтров — по ним строим
+        # аналитику «что именно люди ищут», без утечки самого текста.
+        filled = sorted(
+            name
+            for name, value in request.model_dump(exclude_none=True).items()
+            if name not in {"sort_by", "page", "page_size"}
+        )
+        log.info(
+            "nlq.parsed",
+            parsed_filters=filled,
+            tokens_used=total_tokens,
+            latency_ms=latency_ms,
+            text_hash=text_hash,
+            model=self._settings.gigachat_model,
+        )
+        return request, total_tokens
+
+    # ------------------------------------------------------------------
+    # Внутренние помощники
+    # ------------------------------------------------------------------
+
+    def _truncate_input(self, text: str) -> str:
+        cap = self._settings.gigachat_max_input_chars
+        if len(text) <= cap:
+            return text
+        log.warning(
+            "llm.input_truncated",
+            original_len=len(text),
+            truncated_to=cap,
+        )
+        return text[:cap]
+
+    def _build_chat_payload(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        temperature: float,
+    ) -> dict:
+        """Собрать chat-completions payload.
+
+        Параметризован system/user/temperature, потому что ``summarize``
+        и ``parse_search_query`` отличаются именно этими тремя
+        параметрами, а каркас (модель, формат сообщений) одинаковый.
+        """
+
+        return {
+            "model": self._settings.gigachat_model,
+            "temperature": temperature,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+        }
+
+    async def _chat_with_token_refresh(self, payload: dict) -> dict:
+        """POST /chat/completions с одним retry на 401 и маппингом ошибок.
+
+        Выделено в общий helper, чтобы и ``summarize``, и
+        ``parse_search_query`` одинаково обрабатывали:
+
+        * 401 — один retry с принудительным refresh токена; повторный
+          401 → ``LLMAuthError``.
+        * 429 → ``LLMRateLimitError`` (без ретраев — на demo-тарифе
+          это месячный лимит, ждать бесполезно).
+        * любые ``>=400`` → ``LLMError``.
+        * timeout → ``LLMTimeoutError``.
+        * любой другой transport-сбой httpx → ``LLMError``.
+
+        Возвращает уже распарсенный JSON-словарь ответа; не лезет в
+        ``choices[0]`` — это специфично для каждого вызова.
+        """
+
+        token = await self._get_token()
 
         try:
             response = await self._post_chat(token, payload)
@@ -142,51 +357,22 @@ class GigaChatAdapter(LLMGateway):
             # SSL handshake) — это всё провайдер недоступен.
             raise LLMError("LLM transport error") from exc
 
-        latency_ms = int((time.perf_counter() - started) * 1000)
-
         try:
-            data = response.json()
+            return response.json()
         except json.JSONDecodeError as exc:
             raise LLMResponseError("LLM returned non-JSON body") from exc
 
-        summary = self._parse_summary(data)
+    @staticmethod
+    def _nlq_fallback(text: str) -> SearchDecisionsRequest:
+        """Degraded-парсинг для NLQ: ``query=text``, дефолтная сортировка.
 
-        log.info(
-            "llm.summarize",
-            prompt_hash=_hash_for_audit(truncated),
-            tokens_used=summary.tokens_used,
-            latency_ms=latency_ms,
-            model=self._settings.gigachat_model,
-        )
-        return summary
+        Используется, когда LLM вернула не-JSON или JSON, не
+        проходящий валидацию схемы. Цель — отдать пользователю хоть
+        какой-то результат BM25-поиска по его же исходной фразе,
+        вместо того чтобы швырнуть 502 в UI.
+        """
 
-    # ------------------------------------------------------------------
-    # Внутренние помощники
-    # ------------------------------------------------------------------
-
-    def _truncate_input(self, text: str) -> str:
-        cap = self._settings.gigachat_max_input_chars
-        if len(text) <= cap:
-            return text
-        log.warning(
-            "llm.input_truncated",
-            original_len=len(text),
-            truncated_to=cap,
-        )
-        return text[:cap]
-
-    def _build_chat_payload(self, user_text: str) -> dict:
-        return {
-            "model": self._settings.gigachat_model,
-            "temperature": 0.2,
-            "messages": [
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {
-                    "role": "user",
-                    "content": f"Текст решения:\n\n{user_text}",
-                },
-            ],
-        }
+        return SearchDecisionsRequest(query=text)
 
     async def _post_chat(
         self,

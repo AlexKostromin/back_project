@@ -1,8 +1,17 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import TYPE_CHECKING
 
 from app.modules.search.schemas.summary import DecisionSummary
+
+if TYPE_CHECKING:
+    # Локальный импорт под TYPE_CHECKING: схема ``SearchDecisionsRequest``
+    # лежит в search-модуле, а сам gateway — общий слой ``app.llm``.
+    # Прямой импорт не порождает циклов сейчас, но связывает чистый
+    # шлюз с конкретным доменом раньше времени; держим связь только
+    # на типовом уровне.
+    from app.modules.search.schemas.search import SearchDecisionsRequest
 
 
 class LLMGateway(ABC):
@@ -33,4 +42,26 @@ class LLMGateway(ABC):
 
         Raises:
             LLMError: любой сбой провайдера (auth/rate/timeout/контракт).
+        """
+
+    @abstractmethod
+    async def parse_search_query(
+        self, text: str
+    ) -> tuple[SearchDecisionsRequest, int]:
+        """Перевести натуральный запрос в структурный SearchDecisionsRequest.
+
+        Args:
+            text: пользовательская фраза (натуральный язык).
+                Адаптер сам отвечает за truncation/защиту входа.
+
+        Returns:
+            ``(parsed_request, tokens_used)``. ``tokens_used`` отдаётся
+            отдельно, чтобы ``NLQResponse`` мог положить его в ответ —
+            gateway не должен конструировать сам Response.
+
+        Raises:
+            LLMError: при auth/rate/timeout/контракте провайдера.
+                НИКОГДА не raise при «LLM понял частично»: в этом случае
+                возвращаем degraded-парсинг (минимум —
+                ``query=text``, ``sort_by=DATE_DESC``).
         """
