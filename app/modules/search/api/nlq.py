@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from elasticsearch import AsyncElasticsearch
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Request, status
 
 from app.core.config import Settings, get_settings
+from app.core.rate_limit import _per_minute_limit, llm_limiter
 from app.es.client import get_es
 from app.llm.dependencies import get_llm_gateway
 from app.llm.gateway import LLMGateway
@@ -25,11 +26,14 @@ router = APIRouter(prefix="/decisions", tags=["search:decisions"])
         "SearchDecisionsRequest и сразу возвращает результаты поиска. "
         "В ответе — что LLM поняла (parsed_query, можно показать "
         "пользователю и дать ему поправить) и сами результаты "
-        "(контракт совпадает с POST /decisions)."
+        "(контракт совпадает с POST /decisions). "
+        "Если IP превысил per-minute лимит — 429 с ``Retry-After``."
     ),
 )
+@llm_limiter.limit(_per_minute_limit)
 async def nlq_search(
-    request: NLQRequest,
+    request: Request,  # обязателен для slowapi — из него берётся IP
+    body: NLQRequest,
     es: AsyncElasticsearch = Depends(get_es),
     settings: Settings = Depends(get_settings),
     gateway: LLMGateway = Depends(get_llm_gateway),
@@ -40,4 +44,4 @@ async def nlq_search(
         es, index_name=settings.es_court_decisions_index
     )
     nlq_service = NLQService(gateway, search_service)
-    return await nlq_service.query(request.text)
+    return await nlq_service.query(body.text)

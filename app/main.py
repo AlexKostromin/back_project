@@ -2,6 +2,7 @@ from fastapi import Depends, FastAPI
 
 from app.core.config import Settings, get_settings
 from app.core.error_handlers import register_exception_handlers
+from app.core.rate_limit import install_rate_limiter
 from app.modules.search.router import router as search_router
 
 settings = get_settings()
@@ -32,6 +33,11 @@ app = FastAPI(
 )
 
 register_exception_handlers(app)
+
+# Лимитер per-IP на LLM-эндпоинты. Сам по себе он ничего не лимитирует:
+# конкретные роуты добавляют ``@llm_limiter.limit(...)`` поверх,
+# и только они попадают под ограничение (см. app.modules.search.api).
+install_rate_limiter(app)
 
 app.include_router(search_router, prefix="/api/v1")
 
