@@ -8,6 +8,7 @@ from app.core.config import Settings, get_settings
 from app.db import session as db_session
 from app.es import client as es_client
 from app.es.mapping import ensure_court_decisions_index
+from app.llm.dependencies import _clear_llm_gateway_cache
 from app.main import app
 
 SEARCH_TABLES = (
@@ -26,14 +27,22 @@ def _reset_engine_cache():
     pytest-asyncio creates a fresh event loop per test; the asyncpg pool
     bound to the previous loop becomes invalid. Clearing the caches forces
     a new engine tied to the current loop.
+
+    Also clears the ``get_llm_gateway`` lru_cache: the cached adapter holds
+    an ``httpx.AsyncClient`` bound to the previous loop, plus an in-memory
+    OAuth token from a previous test's mock transport. Cross-test leakage
+    of that cache caused order-dependent failures here, so we sweep it
+    along with the DB/ES caches.
     """
     db_session.get_engine.cache_clear()
     db_session.get_sessionmaker.cache_clear()
     es_client.get_es_client.cache_clear()
+    _clear_llm_gateway_cache()
     yield
     db_session.get_engine.cache_clear()
     db_session.get_sessionmaker.cache_clear()
     es_client.get_es_client.cache_clear()
+    _clear_llm_gateway_cache()
 
 
 @pytest_asyncio.fixture
