@@ -444,6 +444,11 @@ class _FakeGateway(LLMGateway):
         assert self._result is not None
         return self._result
 
+    async def parse_search_query(
+        self, text: str
+    ):  # pragma: no cover — не используется в этих тестах
+        raise NotImplementedError
+
 
 def _decision_payload(*, source_id: str = "llm-smoke-1") -> dict[str, Any]:
     """Минимальный валидный RawDecision для /ingest."""

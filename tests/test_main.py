@@ -46,7 +46,13 @@ async def test_openapi_exposes_search_request_examples() -> None:
     spec = response.json()
 
     schemas = spec["components"]["schemas"]
-    search_request = schemas["SearchDecisionsRequest"]
+    # Pydantic v2 + FastAPI разделяет схему на ``*-Input`` и ``*-Output``,
+    # если она появляется и как request body (POST /decisions), и как
+    # часть response model'а (NLQResponse.parsed_query из POST /decisions/nlq).
+    # Examples мы фиксируем именно на input-стороне — это то, что юзер шлёт.
+    search_request = schemas.get(
+        "SearchDecisionsRequest-Input"
+    ) or schemas["SearchDecisionsRequest"]
     examples = search_request.get("examples")
 
     assert examples is not None, "SearchDecisionsRequest must expose Swagger examples"
