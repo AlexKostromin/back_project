@@ -5,6 +5,7 @@ import pytest_asyncio
 from sqlalchemy import text
 
 from app.core.config import Settings, get_settings
+from app.core.rate_limit import llm_limiter
 from app.db import session as db_session
 from app.es import client as es_client
 from app.es.mapping import ensure_court_decisions_index
@@ -38,11 +39,17 @@ def _reset_engine_cache():
     db_session.get_sessionmaker.cache_clear()
     es_client.get_es_client.cache_clear()
     _clear_llm_gateway_cache()
+    # Сбрасываем счётчики rate-limit'а: лимитер — module-level singleton
+    # с in-memory storage, поэтому без reset'а счётчики накапливаются
+    # между тестами и LLM-эндпоинты могут начать возвращать 429
+    # в самых обычных smoke-кейсах после ~10-го теста.
+    llm_limiter.reset()
     yield
     db_session.get_engine.cache_clear()
     db_session.get_sessionmaker.cache_clear()
     es_client.get_es_client.cache_clear()
     _clear_llm_gateway_cache()
+    llm_limiter.reset()
 
 
 @pytest_asyncio.fixture

@@ -25,6 +25,7 @@ dependencies = [
     # Pinned exactly: small community library that patches browser internals.
     # Bump deliberately after reviewing upstream changes — supply-chain risk.
     "playwright-stealth (==2.0.3)",
+    "slowapi (>=0.1.9,<0.2.0)",
 ]
 
 

@@ -54,6 +54,14 @@ class Settings(BaseSettings):
     # для русского, плюс место под промпт и ответ.
     gigachat_max_input_chars: int = 24000
 
+    # Rate-limit на LLM-эндпоинты (per IP, per minute). На demo-тарифе
+    # GIGACHAT_API_PERS месячный лимит токенов конечен — открытый
+    # анонимный эндпоинт без лимита одна curl-петля сжигает за минуты.
+    # 10/min достаточно для живой демонстрации (демонстратор в худшем
+    # случае жмёт «обновить» 3-4 раза подряд) и плотно блокирует
+    # ботов-сканеров. Меняется без ребилда через .env.
+    llm_rate_limit_per_minute: int = 10
+
     @field_validator("scraper_user_agent")
     @classmethod
     def _no_crlf(cls, v: str) -> str:
