@@ -56,6 +56,16 @@ async def clean_search_tables():
 
 
 @pytest_asyncio.fixture
+async def clean_cases():
+    """Clean cases table and all dependent tables via CASCADE."""
+    sessionmaker = db_session.get_sessionmaker()
+    async with sessionmaker() as session:
+        await session.execute(text("TRUNCATE TABLE cases RESTART IDENTITY CASCADE"))
+        await session.commit()
+    yield
+
+
+@pytest_asyncio.fixture
 async def clean_es_index():
     """Route ingest/search to a dedicated test index, dropped and recreated
     fresh per test.
