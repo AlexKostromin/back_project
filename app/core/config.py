@@ -35,6 +35,25 @@ class Settings(BaseSettings):
     kad_session_ttl_seconds: int = 23 * 3600
     kad_session_headless: bool = True
 
+    # GigaChat (Сбер). Свободный тариф GIGACHAT_API_PERS — лимит токенов в
+    # месяц, модель ``GigaChat`` (Lite, ~8K контекст). Auth — OAuth2 client
+    # credentials по адресу ngw.devices.sberbank.ru, чат — через
+    # gigachat.devices.sberbank.ru. TLS требует Russian Trusted Root CA;
+    # путь до bundle хранится тут, чтобы httpx-клиент мог его подсунуть
+    # как ``verify=...``.
+    gigachat_client_id: str = ""
+    gigachat_client_secret: str = ""
+    gigachat_scope: str = "GIGACHAT_API_PERS"
+    gigachat_model: str = "GigaChat"
+    gigachat_auth_url: str = "https://ngw.devices.sberbank.ru:9443/api/v2/oauth"
+    gigachat_base_url: str = "https://gigachat.devices.sberbank.ru/api/v1"
+    gigachat_ca_bundle_path: str = "app/llm/certs/russian_trusted_root_ca.pem"
+    gigachat_request_timeout_s: float = 30.0
+    # Жёсткий cap на длину текста, отдаваемого в LLM (символы), чтобы не
+    # упереться в context window модели Lite. ~24K символов ≈ ~8K токенов
+    # для русского, плюс место под промпт и ответ.
+    gigachat_max_input_chars: int = 24000
+
     @field_validator("scraper_user_agent")
     @classmethod
     def _no_crlf(cls, v: str) -> str:
